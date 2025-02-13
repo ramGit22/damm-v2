@@ -9,3 +9,9 @@ mod overflow_tests;
 
 #[cfg(test)]
 mod integration_tests;
+
+#[cfg(test)]
+mod dynamic_fee_tests;
+
+#[cfg(test)]
+mod price_math;

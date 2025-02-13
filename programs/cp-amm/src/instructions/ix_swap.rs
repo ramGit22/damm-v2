@@ -3,7 +3,8 @@ use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::{
     constants::seeds::POOL_AUTHORITY_PREFIX,
-    state::{swap::TradeDirection, CollectFeeMode, Pool},
+    params::swap::TradeDirection,
+    state::{CollectFeeMode, Pool},
     token::{calculate_transfer_fee_included_amount, transfer_from_pool, transfer_from_user},
     PoolError,
 };
@@ -91,6 +92,11 @@ pub fn handle_swap(ctx: Context<Swap>, params: SwapParameters) -> Result<()> {
     let is_referral = ctx.accounts.referral_token_account.is_some();
 
     let mut pool = ctx.accounts.pool.load_mut()?;
+
+    // update for dynamic fee reference
+    let current_timestamp = Clock::get()?.unix_timestamp as u64;
+    pool.update_pre_swap(current_timestamp)?;
+
     let swap_result = pool.get_swap_result(amount_in, is_referral, trade_direction)?;
 
     require!(
@@ -98,7 +104,7 @@ pub fn handle_swap(ctx: Context<Swap>, params: SwapParameters) -> Result<()> {
         PoolError::ExceededSlippage
     );
 
-    pool.apply_swap_result(&swap_result, trade_direction)?;
+    pool.apply_swap_result(&swap_result, trade_direction, current_timestamp)?;
 
     // send to reserve
     let (

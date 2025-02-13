@@ -3,11 +3,9 @@ use anchor_lang::prelude::*;
 use crate::{
     activation_handler::{ActivationHandler, ActivationType},
     constants::fee::{FEE_DENOMINATOR, MEME_MIN_FEE_NUMERATOR},
+    params::pool_fees::validate_fee_fraction,
     safe_math::SafeMath,
-    state::{
-        get_timing_constraint_by_activation_type, pool_fees::validate_fee_fraction,
-        TimingConstraint,
-    },
+    state::{get_timing_constraint_by_activation_type, TimingConstraint},
     PoolError,
 };
 
@@ -98,16 +96,6 @@ impl CustomizableParams {
         self.validation_activation(&timing_constraint)?;
         Ok(())
     }
-
-    // fn to_pool_fee(&self) -> PoolFees {
-    //     PoolFees {
-    //         // Pool fee start at start trading fee user specified
-    //         trade_fee_numerator: self.trade_fee_numerator.into(),
-    //         protocol_fee_percent: MEME_PROTOCOL_FEE_PERCENT,
-    //         partner_fee_percent: 0,
-    //         referral_fee_percent: 0,
-    //     }
-    // }
 
     fn validate_fee(&self) -> Result<()> {
         // 1. Fee must within the range

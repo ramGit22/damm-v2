@@ -1,6 +1,6 @@
 //! Fees module includes information about fee charges
-use crate::constants;
 use crate::constants::fee::{FEE_DENOMINATOR, MAX_BASIS_POINT};
+use crate::constants::{self, BASIS_POINT_MAX, U24_MAX};
 use crate::error::PoolError;
 use crate::safe_math::SafeMath;
 use anchor_lang::prelude::*;
@@ -15,7 +15,6 @@ pub struct PoolFees {
     /// accounts during a trade, making the value of liquidity tokens rise.
     /// Trade fee numerator
     pub trade_fee_numerator: u64,
-
     /// Protocol trading fees are extra token amounts that are held inside the token
     /// accounts during a trade, with the equivalent in pool tokens minted to
     /// the protocol of the program.
@@ -25,6 +24,58 @@ pub struct PoolFees {
     pub partner_fee_percent: u8,
     /// referral fee
     pub referral_fee_percent: u8,
+
+    /// dynamic fee
+    pub dynamic_fee: Option<DynamicFee>,
+}
+
+#[derive(Copy, Clone, Debug, AnchorSerialize, AnchorDeserialize, InitSpace, Default)]
+pub struct DynamicFee {
+    pub bin_step: u16,
+    pub bin_step_u128: u128,
+    pub filter_period: u16,
+    pub decay_period: u16,
+    pub reduction_factor: u16,
+    pub max_volatility_accumulator: u32,
+    pub variable_fee_control: u32,
+}
+
+impl DynamicFee {
+    pub fn validate(&self) -> Result<()> {
+        require!(
+            self.bin_step > 0 && self.bin_step <= 400,
+            PoolError::InvalidInput
+        );
+
+        let bin_step_u128 = (self.bin_step as u128)
+            .safe_shl(64)?
+            .safe_div(BASIS_POINT_MAX.into())?;
+        require!(bin_step_u128 == self.bin_step_u128, PoolError::InvalidInput);
+
+        // filter period < t < decay period
+        require!(
+            self.filter_period < self.decay_period,
+            PoolError::InvalidInput
+        );
+
+        // reduction factor decide the decay rate of variable fee, max reduction_factor is BASIS_POINT_MAX = 100% reduction
+        require!(
+            self.reduction_factor <= BASIS_POINT_MAX as u16,
+            PoolError::InvalidInput
+        );
+
+        // prevent program overflow
+        require!(
+            self.variable_fee_control <= U24_MAX,
+            PoolError::InvalidInput
+        );
+        require!(
+            self.max_volatility_accumulator <= U24_MAX,
+            PoolError::InvalidInput
+        );
+
+        Ok(())
+    }
 }
 
 /// Helper function for calculating swap fee
@@ -102,6 +153,10 @@ impl PoolFees {
 
         if trade_fee_bps > constants::fee::MAX_FEE_BPS {
             return Err(PoolError::ExceedMaxFeeBps.into());
+        }
+
+        if let Some(dynamic_fee) = self.dynamic_fee {
+            dynamic_fee.validate()?;
         }
         Ok(())
     }

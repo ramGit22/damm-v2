@@ -231,4 +231,7 @@ pub enum PoolError {
 
     #[msg("Invalid collect fee mode")]
     InvalidCollectFeeMode,
+
+    #[msg("Invalid input")]
+    InvalidInput,
 }

@@ -28,13 +28,13 @@ proptest! {
             .unwrap();
 
         println!("result_0 {:?}", result_0);
-        pool.apply_add_liquidity(&mut position, liquidity_delta, 0).unwrap();
+        pool.apply_add_liquidity(&mut position, liquidity_delta).unwrap();
 
 
         let result_1 = pool.get_amounts_for_modify_liquidity(liquidity_delta, Rounding::Down).unwrap();
         println!("result_1 {:?}", result_0);
 
-        pool.apply_remove_liquidity(&mut position, liquidity_delta, 0).unwrap();
+        pool.apply_remove_liquidity(&mut position, liquidity_delta).unwrap();
 
         assert_eq!(pool.liquidity, 0);
         assert_eq!(position.liquidity, 0);

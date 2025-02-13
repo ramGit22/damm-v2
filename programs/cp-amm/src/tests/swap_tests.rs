@@ -3,8 +3,9 @@ use std::{u128, u64};
 use crate::{
     constants::{LIQUIDITY_MAX, MAX_SQRT_PRICE, MIN_SQRT_PRICE},
     curve::get_initialize_amounts,
+    params::swap::TradeDirection,
     safe_math::SafeMath,
-    state::{swap::TradeDirection, Pool},
+    state::Pool,
 };
 use proptest::prelude::*;
 
@@ -34,7 +35,7 @@ proptest! {
             .get_swap_result(amount_in, false, trade_direction)
             .unwrap();
 
-            pool.apply_swap_result(&swap_result_0, trade_direction).unwrap();
+            pool.apply_swap_result(&swap_result_0, trade_direction, 0).unwrap();
             // swap back
 
             let swap_result_1 = pool
@@ -69,7 +70,7 @@ proptest! {
             .get_swap_result(amount_in, false, trade_direction)
             .unwrap();
 
-            pool.apply_swap_result(&swap_result_0, trade_direction).unwrap();
+            pool.apply_swap_result(&swap_result_0, trade_direction, 0).unwrap();
             // swap back
 
             let swap_result_1 = pool
@@ -134,7 +135,7 @@ fn test_reserve_wont_lost_when_swap_from_b_to_a_single() {
 
     println!("{:?}", swap_result_0);
 
-    pool.apply_swap_result(&swap_result_0, trade_direction)
+    pool.apply_swap_result(&swap_result_0, trade_direction, 0)
         .unwrap();
 
     let swap_result_1 = pool
@@ -194,7 +195,7 @@ fn test_swap_basic() {
 
     // return;
 
-    pool.apply_swap_result(&swap_result, trade_direction)
+    pool.apply_swap_result(&swap_result, trade_direction, 0)
         .unwrap();
 
     let swap_result_referse = pool

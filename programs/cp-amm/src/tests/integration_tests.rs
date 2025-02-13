@@ -1,6 +1,7 @@
 use crate::{
     constants::{LIQUIDITY_MAX, MAX_SQRT_PRICE, MIN_SQRT_PRICE},
-    state::{swap::TradeDirection, Pool, PoolFeesStruct, Position},
+    params::swap::TradeDirection,
+    state::{fee::PoolFeesStruct, Pool, Position},
     u128x128_math::Rounding,
 };
 use proptest::{bool::ANY, prelude::*};
@@ -162,8 +163,7 @@ fn execute_add_liquidity(
         .get_amounts_for_modify_liquidity(liquidity_delta, Rounding::Up)
         .unwrap();
 
-    pool.apply_add_liquidity(position, liquidity_delta, 0)
-        .unwrap();
+    pool.apply_add_liquidity(position, liquidity_delta).unwrap();
 
     reserve.amount_a = reserve.amount_a.checked_add(result.amount_a).unwrap();
     reserve.amount_b = reserve.amount_b.checked_add(result.amount_b).unwrap();
@@ -179,7 +179,7 @@ fn execute_remove_liquidity(
         .get_amounts_for_modify_liquidity(liquidity_delta, Rounding::Down)
         .unwrap();
 
-    pool.apply_remove_liquidity(position, liquidity_delta, 0)
+    pool.apply_remove_liquidity(position, liquidity_delta)
         .unwrap();
 
     reserve.amount_a = reserve.amount_a.checked_sub(result.amount_a).unwrap();
@@ -201,7 +201,7 @@ fn execute_swap_liquidity(
         .get_swap_result(amount_in, is_referral, trade_direction)
         .unwrap();
 
-    pool.apply_swap_result(&swap_result, trade_direction)
+    pool.apply_swap_result(&swap_result, trade_direction, 0)
         .unwrap();
 
     match trade_direction {

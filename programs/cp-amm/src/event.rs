@@ -1,6 +1,8 @@
 //! Event module includes information about events of the program
 use anchor_lang::prelude::*;
 
+use crate::params::pool_fees::PoolFees;
+
 // use crate::state::FeeCurveInfoFromDuration;
 
 /// Close config
@@ -15,10 +17,7 @@ pub struct EvtCloseConfig {
 /// Create config
 #[event]
 pub struct EvtCreateConfig {
-    pub trade_fee_numerator: u64,
-    pub protocol_fee_percent: u8,
-    pub partner_fee_percent: u8,
-    pub referral_fee_percent: u8,
+    pub pool_fees: PoolFees,
     pub vault_config_key: Pubkey,
     pub pool_creator_authority: Pubkey,
     pub activation_type: u8,

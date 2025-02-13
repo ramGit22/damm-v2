@@ -7,6 +7,10 @@ pub const MAX_SQRT_PRICE: u128 = 79226673521066979257578248091;
 
 pub const LIQUIDITY_MAX: u128 = 34028236692093846346337460743;
 
+pub const BASIS_POINT_MAX: u64 = 10_000;
+
+pub const U24_MAX: u32 = 0xffffff;
+
 pub mod activation {
     #[cfg(not(feature = "test-bpf"))]
     pub const SLOT_BUFFER: u64 = 9000;
@@ -43,21 +47,21 @@ pub mod activation {
 pub mod fee {
     /// Host trade fee numerator
     // 20% of protocol trade fee
-    pub const HOST_TRADE_FEE_NUMERATOR: u64 = 20000;
+    pub const HOST_TRADE_FEE_NUMERATOR: u64 = 200_000;
 
     /// Default fee denominator. DO NOT simply update it as it will break logic that depends on it as default value.
-    pub const FEE_DENOMINATOR: u64 = 100_000_000;
+    pub const FEE_DENOMINATOR: u64 = 1_000_000_000;
 
     /// Max fee BPS
     pub const MAX_FEE_BPS: u64 = 1500; // 15%
-    pub const MAX_FEE_NUMERATOR: u64 = 15_000_000; // 15%
+    pub const MAX_FEE_NUMERATOR: u64 = 150_000_000; // 15%
 
     /// Max basis point. 100% in pct
     pub const MAX_BASIS_POINT: u64 = 10000;
 
     // For meme coins
-    pub const MEME_MIN_FEE_NUMERATOR: u64 = 250_000; // 250 / FEE_DENOMINATOR = 0.25%
-    pub const MEME_CONFIG_START_MAX_FEE_NUMERATOR: u64 = 99_000_000; // 99_000 / FEE_DENOMINATOR = 99%
+    pub const MEME_MIN_FEE_NUMERATOR: u64 = 2_500_000; // 250 / FEE_DENOMINATOR = 0.25%
+    pub const MEME_CONFIG_START_MAX_FEE_NUMERATOR: u64 = 990_000_000; // 99_000 / FEE_DENOMINATOR = 99%
 
     pub const MEME_MIN_FEE_BPS: u64 = 25; // 0.25%
     pub const MEME_CONFIG_START_MAX_FEE_BPS: u64 = 9900; // 99%
@@ -81,9 +85,9 @@ pub mod fee {
 
     pub const MEME_MIN_FEE_UPDATE_WINDOW_DURATION: i64 = 60 * 30; // 30 minutes
 
-    pub const MAX_PARTNER_FEE_NUMERATOR: u64 = 50000; // 50%
+    // pub const MAX_PARTNER_FEE_NUMERATOR: u64 = 500_000; // 50%
 
-    static_assertions::const_assert!(MAX_PARTNER_FEE_NUMERATOR <= FEE_DENOMINATOR);
+    // static_assertions::const_assert!(MAX_PARTNER_FEE_NUMERATOR <= FEE_DENOMINATOR);
 }
 
 pub mod seeds {

@@ -3,19 +3,16 @@ use crate::assert_eq_admin;
 use crate::constants::seeds::CONFIG_PREFIX;
 use crate::event;
 use crate::params::customizable_params::CustomizableParams;
+use crate::params::pool_fees::PartnerInfo;
+use crate::params::pool_fees::PoolFees;
 use crate::state::config::Config;
-use crate::state::pool_fees::PoolFees;
-use crate::state::pool_fees::{validate_fee_fraction, PartnerInfo};
 use crate::state::CollectFeeMode;
 use crate::PoolError;
 use anchor_lang::prelude::*;
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ConfigParameters {
-    pub trade_fee_numerator: u64,
-    pub protocol_fee_percent: u8,
-    pub partner_fee_percent: u8,
-    pub referral_fee_percent: u8,
+    pub pool_fees: PoolFees,
     pub sqrt_min_price: u128,
     pub sqrt_max_price: u128,
     pub vault_config_key: Pubkey,
@@ -52,15 +49,12 @@ pub fn handle_create_config(
     config_parameters: ConfigParameters,
 ) -> Result<()> {
     let ConfigParameters {
-        trade_fee_numerator,
-        protocol_fee_percent,
+        pool_fees,
         vault_config_key,
         pool_creator_authority,
         activation_type,
-        partner_fee_percent,
         sqrt_min_price,
         sqrt_max_price,
-        referral_fee_percent,
         collect_fee_mode,
         index,
     } = config_parameters;
@@ -70,6 +64,8 @@ pub fn handle_create_config(
         sqrt_min_price == 0 && sqrt_max_price == u128::MAX,
         PoolError::InvalidPriceRange
     );
+    // validate fee
+    pool_fees.validate()?;
 
     let has_alpha_vault = vault_config_key.ne(&Pubkey::default());
 
@@ -81,7 +77,8 @@ pub fn handle_create_config(
         activation_point,
         has_alpha_vault,
         activation_type,
-        trade_fee_numerator: trade_fee_numerator
+        trade_fee_numerator: pool_fees
+            .trade_fee_numerator
             .try_into()
             .map_err(|_| PoolError::TypeCastFailed)?,
         padding: [0; 53],
@@ -90,24 +87,13 @@ pub fn handle_create_config(
     // validate
     customizable_parameters.validate(&Clock::get()?)?;
 
-    validate_fee_fraction(protocol_fee_percent.into(), 100)?;
-    validate_fee_fraction(partner_fee_percent.into(), 100)?;
-    validate_fee_fraction(referral_fee_percent.into(), 100)?;
-
     let partner_info = PartnerInfo {
         partner_authority: pool_creator_authority,
-        fee_percent: partner_fee_percent,
+        fee_percent: pool_fees.partner_fee_percent,
         ..Default::default()
     };
 
     partner_info.validate()?;
-
-    let pool_fees = PoolFees {
-        trade_fee_numerator,
-        protocol_fee_percent,
-        partner_fee_percent,
-        referral_fee_percent,
-    };
 
     let mut config = ctx.accounts.config.load_init()?;
     config.init(
@@ -121,11 +107,8 @@ pub fn handle_create_config(
     );
 
     emit_cpi!(event::EvtCreateConfig {
-        trade_fee_numerator,
-        protocol_fee_percent,
+        pool_fees,
         config: ctx.accounts.config.key(),
-        partner_fee_percent,
-        referral_fee_percent,
         vault_config_key,
         pool_creator_authority,
         activation_type,

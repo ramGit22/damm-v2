@@ -84,16 +84,12 @@ impl Position {
         Ok(())
     }
 
-    pub fn add_liquidity(&mut self, liquidity_delta: u128, current_timestamp: u64) -> Result<()> {
+    pub fn add_liquidity(&mut self, liquidity_delta: u128) -> Result<()> {
         self.liquidity = self.liquidity.safe_add(liquidity_delta)?;
         Ok(())
     }
 
-    pub fn remove_liquidity(
-        &mut self,
-        liquidity_delta: u128,
-        current_timestamp: u64,
-    ) -> Result<()> {
+    pub fn remove_liquidity(&mut self, liquidity_delta: u128) -> Result<()> {
         self.liquidity = self.liquidity.safe_sub(liquidity_delta)?;
         Ok(())
     }

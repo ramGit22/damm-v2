@@ -1,5 +1,6 @@
 use crate::constants::LIQUIDITY_MAX;
 use crate::curve::get_delta_amount_a_unsigned_unchecked;
+use crate::params::swap::TradeDirection;
 use crate::u128x128_math::mul_div;
 use crate::{
     curve::{
@@ -12,7 +13,8 @@ use crate::{
 use ruint::aliases::U256;
 use std::u64;
 
-use super::{swap::TradeDirection, FeeOnAmountResult, PoolFeesStruct, Position};
+use super::fee::{DynamicFeeStruct, FeeOnAmountResult, PoolFeesStruct};
+use super::Position;
 use anchor_lang::prelude::*;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 /// collect fee mode
@@ -269,6 +271,7 @@ impl Pool {
         &mut self,
         swap_result: &SwapResult,
         trade_direction: TradeDirection,
+        current_timestamp: u64,
     ) -> Result<()> {
         let &SwapResult {
             output_amount: _output_amount,
@@ -278,6 +281,7 @@ impl Pool {
             partner_fee,
             referral_fee: _referral_fee,
         } = swap_result;
+        let old_sqrt_price = self.sqrt_price;
         self.sqrt_price = next_sqrt_price;
         let fee_per_token_stored: u128 =
             mul_div(lp_fee.into(), LIQUIDITY_MAX, self.liquidity, Rounding::Down).unwrap();
@@ -294,6 +298,7 @@ impl Pool {
             self.protocol_a_fee = self.partner_a_fee.safe_add(protocol_fee)?;
             self.fee_a_per_liquidity = self.fee_a_per_liquidity.safe_add(fee_per_token_stored)?;
         }
+        self.update_post_swap(old_sqrt_price, current_timestamp)?;
         Ok(())
     }
 
@@ -324,13 +329,12 @@ impl Pool {
         &mut self,
         position: &mut Position,
         liquidity_delta: u128,
-        current_timestamp: u64,
     ) -> Result<()> {
         // update current fee for position
         position.update_fee(self.fee_a_per_liquidity, self.fee_b_per_liquidity)?;
 
         // add liquidity
-        position.add_liquidity(liquidity_delta, current_timestamp)?;
+        position.add_liquidity(liquidity_delta)?;
 
         self.liquidity = self.liquidity.safe_add(liquidity_delta)?;
 
@@ -341,13 +345,12 @@ impl Pool {
         &mut self,
         position: &mut Position,
         liquidity_delta: u128,
-        current_timestamp: u64,
     ) -> Result<()> {
         // update current fee for position
         position.update_fee(self.fee_a_per_liquidity, self.fee_b_per_liquidity)?;
 
         // remove liquidity
-        position.remove_liquidity(liquidity_delta, current_timestamp)?;
+        position.remove_liquidity(liquidity_delta)?;
 
         self.liquidity = self.liquidity.safe_sub(liquidity_delta)?;
 
@@ -374,6 +377,34 @@ impl Pool {
         } else {
             Ok(amount.try_into().unwrap())
         }
+    }
+
+    pub fn update_pre_swap(&mut self, current_timestamp: u64) -> Result<()> {
+        if self.pool_fees.dynamic_fee.is_dynamic_fee_enable() {
+            self.pool_fees
+                .dynamic_fee
+                .update_references(self.sqrt_price, current_timestamp)?;
+        }
+        Ok(())
+    }
+
+    pub fn update_post_swap(&mut self, old_sqrt_price: u128, current_timestamp: u64) -> Result<()> {
+        if self.pool_fees.dynamic_fee.is_dynamic_fee_enable() {
+            self.pool_fees
+                .dynamic_fee
+                .update_volatility_accumulator(self.sqrt_price)?;
+
+            // update only last_update_timestamp if bin is crossed
+            let delta_price = DynamicFeeStruct::get_detal_bin_id(
+                self.pool_fees.dynamic_fee.bin_step_u128,
+                old_sqrt_price,
+                self.sqrt_price,
+            )?;
+            if delta_price > 0 {
+                self.pool_fees.dynamic_fee.last_update_timestamp = current_timestamp;
+            }
+        }
+        Ok(())
     }
 }
 

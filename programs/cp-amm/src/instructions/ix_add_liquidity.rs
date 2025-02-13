@@ -69,7 +69,7 @@ pub fn handle_add_liquidity(ctx: Context<AddLiquidity>, params: AddLiquidityPara
 
     require!(amount_a > 0 || amount_b > 0, PoolError::AmountIsZero);
 
-    pool.apply_add_liquidity(&mut position,  liquidity_delta, Clock::get().unwrap().unix_timestamp as u64)?;
+    pool.apply_add_liquidity(&mut position,  liquidity_delta)?;
 
     let total_amount_a = calculate_transfer_fee_included_amount(&ctx.accounts.token_a_mint, amount_a)?.amount;
     let total_amount_b = calculate_transfer_fee_included_amount(&ctx.accounts.token_b_mint, amount_b)?.amount;

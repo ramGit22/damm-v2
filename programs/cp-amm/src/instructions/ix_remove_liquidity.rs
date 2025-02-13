@@ -77,7 +77,7 @@ pub fn handle_remove_liquidity(ctx: Context<RemoveLiquidity>, params: RemoveLiqu
     let mut position = ctx.accounts.position.load_mut()?;
     let ModifyLiquidityResult{amount_a, amount_b} = pool.get_amounts_for_modify_liquidity(liquidity_delta, Rounding::Down)?;
 
-    pool.apply_remove_liquidity(&mut position,  liquidity_delta, Clock::get().unwrap().unix_timestamp as u64)?;
+    pool.apply_remove_liquidity(&mut position,  liquidity_delta)?;
 
 
     require!(amount_a >= token_a_amount_threshold, PoolError::ExceededSlippage);

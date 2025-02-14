@@ -234,4 +234,10 @@ pub enum PoolError {
 
     #[msg("Invalid input")]
     InvalidInput,
+
+    #[msg("Cannot create token badge on supported mint")]
+    CannotCreateTokenBadgeOnSupportedMint,
+
+    #[msg("Invalid token badge")]
+    InvalidTokenBadge,
 }

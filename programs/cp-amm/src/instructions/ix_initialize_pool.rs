@@ -1,7 +1,9 @@
 use crate::constants::seeds::POSITION_PREFIX;
 use crate::curve::get_initialize_amounts;
+use crate::state::TokenBadge;
 use crate::token::{
-    calculate_transfer_fee_included_amount, get_token_program_flags, transfer_from_user,
+    calculate_transfer_fee_included_amount, get_token_program_flags, is_supported_mint,
+    transfer_from_user,
 };
 use crate::PoolError;
 use crate::{
@@ -157,11 +159,33 @@ pub struct InitializePool<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handle_initialize_pool(
-    ctx: Context<InitializePool>,
+pub fn handle_initialize_pool<'c: 'info, 'info>(
+    ctx: Context<'_, '_, 'c, 'info, InitializePool<'info>>,
     params: InitializePoolParameters,
 ) -> Result<()> {
-    // TODO validate token mints
+    if !is_supported_mint(&ctx.accounts.token_a_mint)? {
+        require!(
+            is_token_badge_initialized(
+                ctx.accounts.token_a_mint.key(),
+                ctx.remaining_accounts
+                    .get(0)
+                    .ok_or(PoolError::InvalidTokenBadge)?,
+            )?,
+            PoolError::InvalidTokenBadge
+        )
+    }
+
+    if !is_supported_mint(&ctx.accounts.token_b_mint)? {
+        require!(
+            is_token_badge_initialized(
+                ctx.accounts.token_b_mint.key(),
+                ctx.remaining_accounts
+                    .get(1)
+                    .ok_or(PoolError::InvalidTokenBadge)?,
+            )?,
+            PoolError::InvalidTokenBadge
+        )
+    }
 
     // TODO validate params
     let InitializePoolParameters {
@@ -244,4 +268,13 @@ pub fn handle_initialize_pool(
     // TODO emit events
 
     Ok(())
+}
+
+fn is_token_badge_initialized<'c: 'info, 'info>(
+    mint: Pubkey,
+    token_badge: &'c AccountInfo<'info>,
+) -> Result<bool> {
+    let token_badge: AccountLoader<'_, TokenBadge> = AccountLoader::try_from(token_badge)?;
+    let token_badge = token_badge.load()?;
+    Ok(token_badge.token_mint == mint)
 }

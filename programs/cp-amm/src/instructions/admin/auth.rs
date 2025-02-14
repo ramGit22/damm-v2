@@ -1,8 +1,7 @@
 use anchor_lang::prelude::*;
 
 pub mod admin {
-    use anchor_lang::prelude::Pubkey;
-    use anchor_lang::solana_program::pubkey;
+    use anchor_lang::{prelude::Pubkey, solana_program::pubkey};
 
     pub const ADMINS: [Pubkey; 3] = [
         pubkey!("5unTfT2kssBuNvHPY6LbJfJpLqEcdMxGYLWHwShaeTLi"),
@@ -12,13 +11,13 @@ pub mod admin {
 }
 
 pub mod treasury {
-    use anchor_lang::solana_program::declare_id;
+    use anchor_lang::declare_id;
     // https://v3.squads.so/dashboard/RW5xNldRYjJaS1FFdlYzQUhWUTQxaTU3VlZoRHRoQWJ0eU12Wm9SaFo3RQ==
     declare_id!("BJQbRiRWhJCyTYZcAuAL3ngDCx3AyFQGKDq8zhiZAKUw");
 }
 
 pub mod fee_update_authority {
-    use anchor_lang::solana_program::declare_id;
+    use anchor_lang::declare_id;
     declare_id!("fee3qJNFpqUEYLCaCntRNqNdqrX2yCeYnpxUj2TJP9P");
 }
 

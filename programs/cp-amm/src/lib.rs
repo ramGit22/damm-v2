@@ -39,8 +39,8 @@ pub mod cp_amm {
         instructions::handle_close_config(ctx)
     }
 
-    pub fn initialize_pool(
-        ctx: Context<InitializePool>,
+    pub fn initialize_pool<'c: 'info, 'info>(
+        ctx: Context<'_, '_, 'c, 'info, InitializePool<'info>>,
         params: InitializePoolParameters,
     ) -> Result<()> {
         instructions::handle_initialize_pool(ctx, params)

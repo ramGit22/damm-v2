@@ -24,6 +24,7 @@ declare_id!("3VcoGUqpWGa9a2GCCDM3osCH6bYoaNMoV9J1cpmQzSwD");
 
 #[program]
 pub mod cp_amm {
+
     use super::*;
 
     /// Create config
@@ -32,6 +33,11 @@ pub mod cp_amm {
         config_parameters: ConfigParameters,
     ) -> Result<()> {
         instructions::handle_create_config(ctx, config_parameters)
+    }
+
+    /// Create token badge
+    pub fn create_token_badge(ctx: Context<CreateTokenBadgeCtx>) -> Result<()> {
+        instructions::handle_create_token_badge(ctx)
     }
 
     /// Close config

@@ -5,7 +5,6 @@ use crate::{
         fee::{FEE_DENOMINATOR, MAX_FEE_NUMERATOR},
         BASIS_POINT_MAX,
     },
-    params::pool_fees::{DynamicFee, PoolFees},
     safe_math::SafeMath,
     utils_math::safe_mul_div_cast_u64,
 };
@@ -53,53 +52,6 @@ pub struct PoolFeesStruct {
 }
 
 impl PoolFeesStruct {
-    pub fn from_pool_fees(pool_fees: &PoolFees) -> Self {
-        let &PoolFees {
-            trade_fee_numerator,
-            protocol_fee_percent,
-            partner_fee_percent,
-            referral_fee_percent,
-            dynamic_fee,
-        } = pool_fees;
-        if let Some(DynamicFee {
-            bin_step,
-            bin_step_u128,
-            filter_period,
-            decay_period,
-            reduction_factor,
-            max_volatility_accumulator,
-            variable_fee_control,
-        }) = dynamic_fee
-        {
-            Self {
-                trade_fee_numerator,
-                protocol_fee_percent,
-                partner_fee_percent,
-                referral_fee_percent,
-                dynamic_fee: DynamicFeeStruct {
-                    initialized: 1,
-                    bin_step,
-                    filter_period,
-                    decay_period,
-                    reduction_factor,
-                    bin_step_u128,
-                    max_volatility_accumulator,
-                    variable_fee_control,
-                    ..Default::default()
-                },
-                ..Default::default()
-            }
-        } else {
-            Self {
-                trade_fee_numerator,
-                protocol_fee_percent,
-                partner_fee_percent,
-                referral_fee_percent,
-                ..Default::default()
-            }
-        }
-    }
-
     // in numerator
     pub fn get_total_trading_fee(&self) -> Result<u128> {
         let total_fee_numerator = self

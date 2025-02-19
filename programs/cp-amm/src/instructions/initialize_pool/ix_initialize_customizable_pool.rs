@@ -1,35 +1,39 @@
-use crate::constants::seeds::POSITION_PREFIX;
+use crate::activation_handler::ActivationType;
+use crate::alpha_vault::alpha_vault;
+use crate::constants::seeds::{CUSTOMIZABLE_POOL_PREFIX, POSITION_PREFIX};
+use crate::constants::{MAX_SQRT_PRICE, MIN_SQRT_PRICE};
 use crate::curve::get_initialize_amounts;
-use crate::state::TokenBadge;
+use crate::params::pool_fees::PoolFees;
+use crate::state::fee::PoolFeesStruct;
+use crate::state::CollectFeeMode;
 use crate::token::{
     calculate_transfer_fee_included_amount, get_token_program_flags, is_supported_mint,
-    transfer_from_user,
+    is_token_badge_initialized, transfer_from_user,
 };
 use crate::PoolError;
 use crate::{
-    constants::seeds::{POOL_AUTHORITY_PREFIX, POOL_PREFIX, TOKEN_VAULT_PREFIX},
-    state::{Config, Pool, Position},
+    constants::seeds::{POOL_AUTHORITY_PREFIX, TOKEN_VAULT_PREFIX},
+    state::{Pool, Position},
 };
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
-/// get first key, this is same as max(key1, key2)
-pub fn get_first_key(key1: Pubkey, key2: Pubkey) -> Pubkey {
-    if key1 > key2 {
-        return key1;
-    }
-    key2
-}
-/// get second key, this is same as min(key1, key2)
-pub fn get_second_key(key1: Pubkey, key2: Pubkey) -> Pubkey {
-    if key1 > key2 {
-        return key2;
-    }
-    key1
-}
+use super::initialize_pool_utils::{get_first_key, get_second_key};
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct InitializePoolParameters {
+pub struct InitializeCustomizablePoolParameters {
+    /// pool fees
+    pub pool_fees: PoolFees,
+    /// sqrt min price
+    pub sqrt_min_price: u128,
+    /// sqrt max price
+    pub sqrt_max_price: u128,
+    /// activation type
+    pub activation_type: ActivationType,
+    /// collect fee mode
+    pub collect_fee_mode: CollectFeeMode,
+    /// has alpha vault
+    pub has_alpha_vault: bool,
     /// initialize liquidity
     pub liquidity: u128,
     /// The init price of the pool as a sqrt(token_b/token_a) Q64.64 value
@@ -38,18 +42,30 @@ pub struct InitializePoolParameters {
     pub activation_point: Option<u64>,
 }
 
+impl InitializeCustomizablePoolParameters {
+    pub fn validate(&self) -> Result<()> {
+        require!(
+            self.sqrt_min_price == MIN_SQRT_PRICE && self.sqrt_max_price == MAX_SQRT_PRICE,
+            PoolError::InvalidPriceRange
+        );
+        require!(
+            self.sqrt_price >= self.sqrt_min_price && self.sqrt_price <= self.sqrt_max_price,
+            PoolError::InvalidPriceRange
+        );
+
+        Ok(())
+    }
+}
+
 #[event_cpi]
 #[derive(Accounts)]
-pub struct InitializePool<'info> {
+pub struct InitializeCustomizablePoolCtx<'info> {
     /// CHECK: Pool creator
     pub creator: UncheckedAccount<'info>,
 
     /// Address paying to create the pool. Can be anyone
     #[account(mut)]
     pub payer: Signer<'info>,
-
-    /// Which config the pool belongs to.
-    pub config: AccountLoader<'info, Config>,
 
     /// CHECK: pool authority
     #[account(
@@ -64,8 +80,7 @@ pub struct InitializePool<'info> {
     #[account(
         init,
         seeds = [
-            POOL_PREFIX.as_ref(),
-            config.key().as_ref(),
+            CUSTOMIZABLE_POOL_PREFIX.as_ref(),
             get_first_key(token_a_mint.key(), token_b_mint.key()).as_ref(),
             get_second_key(token_a_mint.key(), token_b_mint.key()).as_ref(),
         ],
@@ -149,10 +164,11 @@ pub struct InitializePool<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handle_initialize_pool<'c: 'info, 'info>(
-    ctx: Context<'_, '_, 'c, 'info, InitializePool<'info>>,
-    params: InitializePoolParameters,
+pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
+    ctx: Context<'_, '_, 'c, 'info, InitializeCustomizablePoolCtx<'info>>,
+    params: InitializeCustomizablePoolParameters,
 ) -> Result<()> {
+    params.validate()?;
     if !is_supported_mint(&ctx.accounts.token_a_mint)? {
         require!(
             is_token_badge_initialized(
@@ -178,47 +194,45 @@ pub fn handle_initialize_pool<'c: 'info, 'info>(
     }
 
     // TODO validate params
-    let InitializePoolParameters {
+    let InitializeCustomizablePoolParameters {
+        pool_fees,
         liquidity,
         sqrt_price,
         activation_point,
+        sqrt_min_price,
+        sqrt_max_price,
+        activation_type,
+        collect_fee_mode,
+        has_alpha_vault,
     } = params;
 
-    // init pool
-    let config = ctx.accounts.config.load()?;
-
-    require!(
-        sqrt_price >= config.sqrt_min_price && sqrt_price <= config.sqrt_max_price,
-        PoolError::InvalidPriceRange
-    );
-
-    let (token_a_amount, token_b_amount) = get_initialize_amounts(
-        config.sqrt_min_price,
-        config.sqrt_max_price,
-        sqrt_price,
-        liquidity,
-    )?;
+    let (token_a_amount, token_b_amount) =
+        get_initialize_amounts(sqrt_min_price, sqrt_max_price, sqrt_price, liquidity)?;
     let mut pool = ctx.accounts.pool.load_init()?;
 
     pool.initialize(
-        config.pool_fees,
+        PoolFeesStruct::from_pool_fees(&pool_fees),
         ctx.accounts.token_a_mint.key(),
         ctx.accounts.token_b_mint.key(),
         ctx.accounts.token_a_vault.key(),
-        ctx.accounts.token_b_vault.key(),
-        config.get_whitelisted_alpha_vault(ctx.accounts.pool.key()),
+        ctx.accounts.token_b_mint.key(),
+        get_whitelisted_alpha_vault(
+            ctx.accounts.payer.key(),
+            ctx.accounts.pool.key(),
+            has_alpha_vault,
+        ),
         ctx.accounts.creator.key(),
-        config.sqrt_min_price,
-        config.sqrt_max_price,
+        sqrt_min_price,
+        sqrt_max_price,
         sqrt_price,
         activation_point.unwrap_or_default(),
-        config.activation_type,
+        activation_type.into(),
         get_token_program_flags(&ctx.accounts.token_a_mint).into(),
         get_token_program_flags(&ctx.accounts.token_b_mint).into(),
         token_a_amount,
         token_b_amount,
         liquidity,
-        config.collect_fee_mode,
+        collect_fee_mode.into(),
     );
 
     // init position
@@ -260,11 +274,10 @@ pub fn handle_initialize_pool<'c: 'info, 'info>(
     Ok(())
 }
 
-fn is_token_badge_initialized<'c: 'info, 'info>(
-    mint: Pubkey,
-    token_badge: &'c AccountInfo<'info>,
-) -> Result<bool> {
-    let token_badge: AccountLoader<'_, TokenBadge> = AccountLoader::try_from(token_badge)?;
-    let token_badge = token_badge.load()?;
-    Ok(token_badge.token_mint == mint)
+pub fn get_whitelisted_alpha_vault(payer: Pubkey, pool: Pubkey, has_alpha_vault: bool) -> Pubkey {
+    if has_alpha_vault {
+        alpha_vault::derive_vault_pubkey(payer, pool)
+    } else {
+        Pubkey::default()
+    }
 }

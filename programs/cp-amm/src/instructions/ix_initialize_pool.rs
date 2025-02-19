@@ -125,7 +125,7 @@ pub struct InitializePool<'info> {
             token_b_mint.key().as_ref(),
             pool.key().as_ref(),
         ],
-        token::mint = token_a_mint,
+        token::mint = token_b_mint,
         token::authority = pool_authority,
         token::token_program = token_b_program,
         payer = payer,
@@ -134,21 +134,11 @@ pub struct InitializePool<'info> {
     pub token_b_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// payer token a account
-    #[account(
-        mut,
-        token::mint = token_a_mint,
-        token::authority = creator,
-        token::token_program = token_a_program,
-    )]
+    #[account(mut)]
     pub payer_token_a: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// creator token b account
-    #[account(
-        mut,
-        token::mint = token_b_mint,
-        token::authority = creator,
-        token::token_program = token_b_program,
-    )]
+    #[account(mut)]
     pub payer_token_b: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// Program to create mint account and mint tokens
@@ -215,7 +205,7 @@ pub fn handle_initialize_pool<'c: 'info, 'info>(
         ctx.accounts.token_a_mint.key(),
         ctx.accounts.token_b_mint.key(),
         ctx.accounts.token_a_vault.key(),
-        ctx.accounts.token_b_mint.key(),
+        ctx.accounts.token_b_vault.key(),
         config.get_whitelisted_alpha_vault(ctx.accounts.pool.key()),
         ctx.accounts.creator.key(),
         config.sqrt_min_price,

@@ -1,6 +1,8 @@
 use crate::activation_handler::ActivationHandler;
 use crate::assert_eq_admin;
 use crate::constants::seeds::CONFIG_PREFIX;
+use crate::constants::MAX_SQRT_PRICE;
+use crate::constants::MIN_SQRT_PRICE;
 use crate::event;
 use crate::params::customizable_params::CustomizableParams;
 use crate::params::pool_fees::PartnerInfo;
@@ -10,7 +12,7 @@ use crate::state::CollectFeeMode;
 use crate::PoolError;
 use anchor_lang::prelude::*;
 
-#[derive(AnchorSerialize, AnchorDeserialize)]
+#[derive(AnchorSerialize, AnchorDeserialize, Debug)]
 pub struct ConfigParameters {
     pub pool_fees: PoolFees,
     pub sqrt_min_price: u128,
@@ -18,7 +20,7 @@ pub struct ConfigParameters {
     pub vault_config_key: Pubkey,
     pub pool_creator_authority: Pubkey,
     pub activation_type: u8,
-    pub collect_fee_mode: CollectFeeMode,
+    pub collect_fee_mode: u8,
     pub index: u64,
 }
 
@@ -28,10 +30,7 @@ pub struct ConfigParameters {
 pub struct CreateConfigCtx<'info> {
     #[account(
         init,
-        seeds = [
-            CONFIG_PREFIX.as_ref(),
-            config_parameters.index.to_le_bytes().as_ref()
-        ],
+        seeds = [CONFIG_PREFIX.as_ref(), config_parameters.index.to_le_bytes().as_ref()],
         bump,
         payer = admin,
         space = 8 + Config::INIT_SPACE
@@ -46,7 +45,7 @@ pub struct CreateConfigCtx<'info> {
 
 pub fn handle_create_config(
     ctx: Context<CreateConfigCtx>,
-    config_parameters: ConfigParameters,
+    config_parameters: ConfigParameters
 ) -> Result<()> {
     let ConfigParameters {
         pool_fees,
@@ -59,26 +58,27 @@ pub fn handle_create_config(
         index,
     } = config_parameters;
 
-    // only support price from 0 to u64::MAX now
+    // Currently, only support price in fixed range: [MIN_SQRT_PRICE; MAX_SQRT_PRICE]
     require!(
-        sqrt_min_price == 0 && sqrt_max_price == u128::MAX,
+        sqrt_min_price == MIN_SQRT_PRICE && sqrt_max_price == MAX_SQRT_PRICE,
         PoolError::InvalidPriceRange
     );
+
+    // validate collect fee mode
+    require!(CollectFeeMode::try_from(collect_fee_mode).is_ok(), PoolError::InvalidCollectFeeMode);
+
     // validate fee
     pool_fees.validate()?;
 
     let has_alpha_vault = vault_config_key.ne(&Pubkey::default());
 
-    let activation_point = Some(ActivationHandler::get_max_activation_point(
-        activation_type,
-    )?);
+    let activation_point = Some(ActivationHandler::get_max_activation_point(activation_type)?);
 
     let customizable_parameters = CustomizableParams {
         activation_point,
         has_alpha_vault,
         activation_type,
-        trade_fee_numerator: pool_fees
-            .trade_fee_numerator
+        trade_fee_numerator: pool_fees.trade_fee_numerator
             .try_into()
             .map_err(|_| PoolError::TypeCastFailed)?,
         padding: [0; 53],
@@ -97,13 +97,14 @@ pub fn handle_create_config(
 
     let mut config = ctx.accounts.config.load_init()?;
     config.init(
+        index,
         &pool_fees,
         vault_config_key,
         pool_creator_authority,
         activation_type,
         sqrt_min_price,
         sqrt_max_price,
-        collect_fee_mode.into(),
+        collect_fee_mode.into()
     );
 
     emit_cpi!(event::EvtCreateConfig {

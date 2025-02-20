@@ -258,13 +258,10 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
         pool_type,
     );
 
-    // init position
     let mut position = ctx.accounts.position.load_init()?;
     position.initialize(
         ctx.accounts.pool.key(),
         ctx.accounts.creator.key(),
-        Pubkey::default(),                   // TODO may add more params
-        Pubkey::default(),                   // TODO may add more params
         liquidity.safe_sub(LOCK_LP_AMOUNT)?, // locked lp amount to mitigate inflation attack
     );
 
@@ -290,14 +287,6 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
         total_amount_b,
     )?;
 
-    emit_cpi!(EvtCreatePosition {
-        pool: ctx.accounts.pool.key(),
-        owner: ctx.accounts.creator.key(),
-        operator: Pubkey::default(),    // todo check this
-        fee_claimer: Pubkey::default(), // todo check this
-        liquidity,
-    });
-
     emit_cpi!(EvtInitializePool {
         token_a_mint: ctx.accounts.token_a_mint.key(),
         token_b_mint: ctx.accounts.token_b_mint.key(),
@@ -317,6 +306,12 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
         total_amount_a,
         total_amount_b,
         pool_type,
+    });
+
+    emit_cpi!(EvtCreatePosition {
+        pool: ctx.accounts.pool.key(),
+        owner: ctx.accounts.creator.key(),
+        liquidity,
     });
 
     Ok(())

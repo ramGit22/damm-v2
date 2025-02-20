@@ -109,11 +109,14 @@ pub struct Pool {
     pub fee_a_per_liquidity: u128,
     /// cummulative
     pub fee_b_per_liquidity: u128,
+    // TODO: Is this large enough?
+    pub permanent_lock_liquidity: u128,
     /// Padding for further use
     pub _padding_1: [u64; 10],
 }
 
 impl Pool {
+    #[allow(clippy::too_many_arguments)]
     pub fn initialize(
         &mut self,
         pool_fees: PoolFeesStruct,
@@ -370,7 +373,7 @@ impl Pool {
         position.update_fee(self.fee_a_per_liquidity, self.fee_b_per_liquidity)?;
 
         // remove liquidity
-        position.remove_liquidity(liquidity_delta)?;
+        position.remove_unlocked_liquidity(liquidity_delta)?;
 
         self.liquidity = self.liquidity.safe_sub(liquidity_delta)?;
 
@@ -424,6 +427,17 @@ impl Pool {
                 self.pool_fees.dynamic_fee.last_update_timestamp = current_timestamp;
             }
         }
+        Ok(())
+    }
+
+    pub fn accumulate_permanent_locked_liquidity(
+        &mut self,
+        permanent_locked_liquidity: u128,
+    ) -> Result<()> {
+        self.permanent_lock_liquidity = self
+            .permanent_lock_liquidity
+            .safe_add(permanent_locked_liquidity)?;
+
         Ok(())
     }
 }

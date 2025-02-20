@@ -2,6 +2,7 @@ import {
   AnchorProvider,
   BN,
   IdlAccounts,
+  IdlTypes,
   Program,
   Wallet,
 } from "@coral-xyz/anchor";
@@ -35,10 +36,13 @@ import {
 import { processTransactionMaybeThrow } from "./common";
 import { CP_AMM_PROGRAM_ID } from "./constants";
 import { assert, expect } from "chai";
+import { IdlType } from "@coral-xyz/anchor/dist/cjs/idl";
 
 export type Pool = IdlAccounts<CpAmm>["pool"];
 export type Position = IdlAccounts<CpAmm>["position"];
+export type Vesting = IdlAccounts<CpAmm>["vesting"];
 export type Config = IdlAccounts<CpAmm>["config"];
+export type LockPositionParams = IdlTypes<CpAmm>["VestingParameters"];
 
 export function getSecondKey(key1: PublicKey, key2: PublicKey) {
   const buf1 = key1.toBuffer();
@@ -162,7 +166,7 @@ export async function createConfigIx(
 export async function closeConfigIx(
   banksClient: BanksClient,
   admin: Keypair,
-  config: PublicKey,
+  config: PublicKey
 ) {
   const program = createCpAmmProgram();
   const transaction = await program.methods
@@ -170,7 +174,7 @@ export async function closeConfigIx(
     .accounts({
       config,
       admin: admin.publicKey,
-      rentReceiver: admin.publicKey
+      rentReceiver: admin.publicKey,
     })
     .transaction();
   transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
@@ -211,7 +215,8 @@ export async function initializePool(
 
   const poolAuthority = derivePoolAuthority();
   const pool = derivePoolAddress(config, tokenAMint, tokenBMint);
-  const position = derivePositionAddress(pool, params.creator);
+
+  const position = derivePositionAddress(pool, creator);
 
   const tokenAVault = deriveTokenVaultAddress(tokenAMint, pool);
   const tokenBVault = deriveTokenVaultAddress(tokenBMint, pool);
@@ -272,7 +277,99 @@ export async function initializePool(
 
   await processTransactionMaybeThrow(banksClient, transaction);
 
-  return { pool, position };
+  return { pool, position: position };
+}
+
+export async function refreshVestings(
+  banksClient: BanksClient,
+  position: PublicKey,
+  pool: PublicKey,
+  owner: PublicKey,
+  payer: Keypair,
+  vestings: PublicKey[]
+) {
+  const program = createCpAmmProgram();
+
+  const transaction = await program.methods
+    .refreshVesting()
+    .accounts({
+      position,
+      pool,
+      owner,
+    })
+    .remainingAccounts(
+      vestings.map((pubkey) => {
+        return {
+          isSigner: false,
+          isWritable: true,
+          pubkey,
+        };
+      })
+    )
+    .transaction();
+
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(payer);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+}
+
+export async function permanentLockPosition(
+  banksClient: BanksClient,
+  position: PublicKey,
+  owner: Keypair,
+  payer: Keypair
+) {
+  const program = createCpAmmProgram();
+
+  const positionState = await getPosition(banksClient, position);
+
+  const transaction = await program.methods
+    .permanentLockPosition(positionState.unlockedLiquidity)
+    .accounts({
+      position,
+      pool: positionState.pool,
+      owner: owner.publicKey,
+    })
+    .transaction();
+
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(payer, owner);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+}
+
+export async function lockPosition(
+  banksClient: BanksClient,
+  position: PublicKey,
+  owner: Keypair,
+  payer: Keypair,
+  params: LockPositionParams
+) {
+  const program = createCpAmmProgram();
+  const positionState = await getPosition(banksClient, position);
+
+  const vestingKP = Keypair.generate();
+
+  const transaction = await program.methods
+    .lockPosition(params)
+    .accounts({
+      position,
+      vesting: vestingKP.publicKey,
+      owner: owner.publicKey,
+      pool: positionState.pool,
+      program: CP_AMM_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      payer: payer.publicKey,
+    })
+    .transaction();
+
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(payer, owner, vestingKP);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+
+  return vestingKP.publicKey;
 }
 
 export async function createPosition(
@@ -282,6 +379,7 @@ export async function createPosition(
   pool: PublicKey
 ): Promise<PublicKey> {
   const program = createCpAmmProgram();
+
   const position = derivePositionAddress(pool, owner);
 
   const transaction = await program.methods
@@ -401,7 +499,7 @@ export async function removeLiquidity(
 
   const transaction = await program.methods
     .removeLiquidity({
-      liquidityDelta,
+      maxLiquidityDelta: liquidityDelta,
       tokenAAmountThreshold,
       tokenBAmountThreshold,
     })
@@ -563,6 +661,15 @@ export async function getPosition(
   return program.coder.accounts.decode("Position", Buffer.from(account.data));
 }
 
+export async function getVesting(
+  banksClient: BanksClient,
+  vesting: PublicKey
+): Promise<Vesting> {
+  const program = createCpAmmProgram();
+  const account = await banksClient.getAccount(vesting);
+  return program.coder.accounts.decode("Vesting", Buffer.from(account.data));
+}
+
 export async function getConfig(
   banksClient: BanksClient,
   config: PublicKey
@@ -570,4 +677,18 @@ export async function getConfig(
   const program = createCpAmmProgram();
   const account = await banksClient.getAccount(config);
   return program.coder.accounts.decode("Config", Buffer.from(account.data));
+}
+
+export function getStakeProgramErrorCodeHexString(errorMessage: String) {
+  const error = CpAmmIDL.errors.find(
+    (e) =>
+      e.name.toLowerCase() === errorMessage.toLowerCase() ||
+      e.msg.toLowerCase() === errorMessage.toLowerCase()
+  );
+
+  if (!error) {
+    throw new Error(`Unknown CP AMM error message / name: ${errorMessage}`);
+  }
+
+  return "0x" + error.code.toString(16);
 }

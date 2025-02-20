@@ -65,6 +65,7 @@ pub fn handle_add_liquidity(ctx: Context<AddLiquidityCtx>, params: AddLiquidityP
 
     let mut pool = ctx.accounts.pool.load_mut()?;
     let mut position = ctx.accounts.position.load_mut()?;
+
     let ModifyLiquidityResult{amount_a, amount_b} = pool.get_amounts_for_modify_liquidity(liquidity_delta, Rounding::Up)?;
 
     require!(amount_a > 0 || amount_b > 0, PoolError::AmountIsZero);

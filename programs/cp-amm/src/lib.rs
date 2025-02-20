@@ -79,4 +79,21 @@ pub mod cp_amm {
     pub fn claim_position_fee(ctx: Context<ClaimPositionFeeCtx>) -> Result<()> {
         instructions::handle_claim_position_fee(ctx)
     }
+
+    pub fn lock_position(ctx: Context<LockPositionCtx>, params: VestingParameters) -> Result<()> {
+        instructions::handle_lock_position(ctx, params)
+    }
+
+    pub fn refresh_vesting<'a, 'b, 'c: 'info, 'info>(
+        ctx: Context<'a, 'b, 'c, 'info, RefreshVesting<'info>>,
+    ) -> Result<()> {
+        instructions::handle_refresh_vesting(ctx)
+    }
+
+    pub fn permanent_lock_position(
+        ctx: Context<PermanentLockPositionCtx>,
+        permanent_lock_liquidity: u128,
+    ) -> Result<()> {
+        instructions::handle_permanent_lock_position(ctx, permanent_lock_liquidity)
+    }
 }

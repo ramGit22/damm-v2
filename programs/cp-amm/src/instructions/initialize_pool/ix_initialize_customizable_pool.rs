@@ -2,11 +2,10 @@ use std::cmp::{max, min};
 
 use crate::alpha_vault::alpha_vault;
 use crate::constants::seeds::{CUSTOMIZABLE_POOL_PREFIX, POSITION_PREFIX};
-use crate::constants::{LOCK_LP_AMOUNT, MAX_SQRT_PRICE, MIN_SQRT_PRICE};
+use crate::constants::{DEFAULT_QUOTE_MINTS, MAX_SQRT_PRICE, MIN_SQRT_PRICE};
 use crate::curve::get_initialize_amounts;
 use crate::params::activation::ActivationParams;
 use crate::params::pool_fees::PoolFeeParamters;
-use crate::safe_math::SafeMath;
 use crate::state::{CollectFeeMode, PoolType};
 use crate::token::{
     calculate_transfer_fee_included_amount, get_token_program_flags, is_supported_mint,
@@ -45,21 +44,25 @@ pub struct InitializeCustomizablePoolParameters {
 impl InitializeCustomizablePoolParameters {
     pub fn validate(&self) -> Result<()> {
         require!(
-            self.sqrt_min_price == MIN_SQRT_PRICE && self.sqrt_max_price == MAX_SQRT_PRICE,
+            self.sqrt_min_price >= MIN_SQRT_PRICE && self.sqrt_max_price <= MAX_SQRT_PRICE,
             PoolError::InvalidPriceRange
         );
         require!(
             self.sqrt_price >= self.sqrt_min_price && self.sqrt_price <= self.sqrt_max_price,
             PoolError::InvalidPriceRange
         );
-
+        // TODO do we need more buffer here?
         require!(
-            self.liquidity >= LOCK_LP_AMOUNT,
-            PoolError::InvalidMinimumLiquidity
+            self.sqrt_min_price < self.sqrt_max_price,
+            PoolError::InvalidPriceRange
         );
+
+        require!(self.liquidity > 0, PoolError::InvalidMinimumLiquidity);
 
         // validate fee
         self.pool_fees.validate()?;
+        // more validation for protocol fee and partner fee
+        self.pool_fees.validate_for_customizable_pool()?;
 
         CollectFeeMode::try_from(self.collect_fee_mode)
             .map_err(|_| PoolError::InvalidCollectFeeMode)?;
@@ -223,8 +226,19 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
         has_alpha_vault,
     } = params;
 
+    // validate quote token
+    validate_quote_token(
+        &ctx.accounts.token_a_mint.key(),
+        &ctx.accounts.token_b_mint.key(),
+        has_alpha_vault,
+    )?;
+
     let (token_a_amount, token_b_amount) =
         get_initialize_amounts(sqrt_min_price, sqrt_max_price, sqrt_price, liquidity)?;
+    require!(
+        token_a_amount > 0 || token_b_amount > 0,
+        PoolError::AmountIsZero
+    );
     let mut pool = ctx.accounts.pool.load_init()?;
 
     let token_a_flag: u8 = get_token_program_flags(&ctx.accounts.token_a_mint).into();
@@ -243,7 +257,7 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
         ctx.accounts.token_a_vault.key(),
         ctx.accounts.token_b_mint.key(),
         alpha_vault,
-        ctx.accounts.creator.key(),
+        Pubkey::default(),
         sqrt_min_price,
         sqrt_max_price,
         sqrt_price,
@@ -260,10 +274,11 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
 
     let mut position = ctx.accounts.position.load_init()?;
     position.initialize(
+        &mut pool,
         ctx.accounts.pool.key(),
         ctx.accounts.creator.key(),
-        liquidity.safe_sub(LOCK_LP_AMOUNT)?, // locked lp amount to mitigate inflation attack
-    );
+        liquidity,
+    )?;
 
     // transfer token
     let total_amount_a =
@@ -323,4 +338,31 @@ pub fn get_whitelisted_alpha_vault(payer: Pubkey, pool: Pubkey, has_alpha_vault:
     } else {
         Pubkey::default()
     }
+}
+
+pub fn validate_quote_token(
+    token_mint_a: &Pubkey,
+    token_mint_b: &Pubkey,
+    has_alpha_vault: bool,
+) -> Result<()> {
+    let is_a_whitelisted_quote_token = is_whitelisted_quote_token(token_mint_a);
+    // A will never be a whitelisted quote token
+    require!(!is_a_whitelisted_quote_token, PoolError::InvalidQuoteMint);
+    let is_b_whitelisted_quote_token = is_whitelisted_quote_token(token_mint_b);
+    if !is_b_whitelisted_quote_token {
+        // BE AWARE!!!!!!!!!!!!!!!!!!!!!!!!!!
+        // even B is not whitelisted quote token, but deployer should always be aware that B is quote token, A is base token
+        // if B is not whitelisted quote token, then pool shouldn't be linked with an alpha-vault
+        require!(!has_alpha_vault, PoolError::InvalidQuoteMint);
+    }
+    Ok(())
+}
+
+fn is_whitelisted_quote_token(mint: &Pubkey) -> bool {
+    for i in 0..DEFAULT_QUOTE_MINTS.len() {
+        if DEFAULT_QUOTE_MINTS[i].eq(mint) {
+            return true;
+        }
+    }
+    false
 }

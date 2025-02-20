@@ -1,3 +1,6 @@
+use anchor_lang::prelude::Pubkey;
+use solana_program::pubkey;
+
 pub const FEE_CURVE_DURATION_NUMBER: usize = 6;
 
 /// refer raydium clmm
@@ -5,9 +8,7 @@ pub const MIN_SQRT_PRICE: u128 = 4295048016;
 /// refer raydium clmm
 pub const MAX_SQRT_PRICE: u128 = 79226673521066979257578248091;
 
-pub const LIQUIDITY_MAX: u128 = 34028236692093846346337460743;
-
-pub const LOCK_LP_AMOUNT: u128 = 1844674407370955161600; // 100 << 64
+pub const LIQUIDITY_SCALE: u8 = 100;
 
 pub const BASIS_POINT_MAX: u64 = 10_000;
 
@@ -50,9 +51,6 @@ pub mod activation {
 
 /// Store constants related to fees
 pub mod fee {
-    /// Host trade fee numerator
-    // 20% of protocol trade fee
-    pub const HOST_TRADE_FEE_NUMERATOR: u64 = 200_000;
 
     /// Default fee denominator. DO NOT simply update it as it will break logic that depends on it as default value.
     pub const FEE_DENOMINATOR: u64 = 1_000_000_000;
@@ -86,13 +84,11 @@ pub mod fee {
         MEME_MIN_FEE_NUMERATOR
     );
 
-    pub const MEME_PROTOCOL_FEE_PERCENT: u8 = 20; // 20%
+    pub const CUSTOMIZABLE_PROTOCOL_FEE_PERCENT: u8 = 20; // 20%
+
+    pub const CUSTOMIZABLE_HOST_FEE_PERCENT: u8 = 20; // 20%
 
     pub const MEME_MIN_FEE_UPDATE_WINDOW_DURATION: i64 = 60 * 30; // 30 minutes
-
-    // pub const MAX_PARTNER_FEE_NUMERATOR: u64 = 500_000; // 50%
-
-    // static_assertions::const_assert!(MAX_PARTNER_FEE_NUMERATOR <= FEE_DENOMINATOR);
 }
 
 pub mod seeds {
@@ -104,3 +100,14 @@ pub mod seeds {
     pub const POSITION_PREFIX: &[u8] = b"position";
     pub const TOKEN_BADGE_PREFIX: &[u8] = b"token_badge";
 }
+
+pub mod treasury {
+    use anchor_lang::solana_program::declare_id;
+    // https://v3.squads.so/dashboard/RW5xNldRYjJaS1FFdlYzQUhWUTQxaTU3VlZoRHRoQWJ0eU12Wm9SaFo3RQ==
+    declare_id!("BJQbRiRWhJCyTYZcAuAL3ngDCx3AyFQGKDq8zhiZAKUw");
+}
+
+// Supported quote mints
+const SOL: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
+const USDC: Pubkey = pubkey!("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+pub const DEFAULT_QUOTE_MINTS: [Pubkey; 2] = [SOL, USDC];

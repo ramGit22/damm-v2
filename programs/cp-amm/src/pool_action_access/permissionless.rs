@@ -49,17 +49,21 @@ impl PoolActionAccess for PermissionlessActionAccess {
     }
 
     fn can_swap(&self, sender: &Pubkey) -> bool {
-        if !self.is_enabled {
-            return true;
-        }
-        if sender.eq(&self.whitelisted_vault) {
-            self.current_point >= self.pre_activation_point
+        if self.is_enabled {
+            if sender.eq(&self.whitelisted_vault) {
+                self.current_point >= self.pre_activation_point
+            } else {
+                self.current_point >= self.activation_point
+            }
         } else {
-            self.current_point >= self.activation_point
+            false
         }
     }
 
     fn can_create_position(&self) -> bool {
+        self.is_enabled
+    }
+    fn can_lock_position(&self) -> bool {
         self.is_enabled
     }
 }

@@ -7,6 +7,7 @@ import {
   Wallet,
 } from "@coral-xyz/anchor";
 import {
+  AccountLayout,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
@@ -31,6 +32,7 @@ import {
   derivePoolAddress,
   derivePoolAuthority,
   derivePositionAddress,
+  deriveRewardVaultAddress,
   deriveTokenVaultAddress,
 } from "./accounts";
 import { processTransactionMaybeThrow } from "./common";
@@ -230,24 +232,6 @@ export async function initializePool(
     payer.publicKey
   );
 
-  console.log({
-    creator,
-    payer: payer.publicKey,
-    config,
-    poolAuthority,
-    pool,
-    position,
-    tokenAMint,
-    tokenBMint,
-    tokenAVault,
-    tokenBVault,
-    payerTokenA,
-    payerTokenB,
-    tokenAProgram: TOKEN_PROGRAM_ID,
-    tokenBProgram: TOKEN_PROGRAM_ID,
-    systemProgram: SystemProgram.programId,
-  });
-
   const transaction = await program.methods
     .initializePool({
       liquidity: liquidity,
@@ -277,7 +261,270 @@ export async function initializePool(
 
   await processTransactionMaybeThrow(banksClient, transaction);
 
+  // validate pool data
+  const poolState = await getPool(banksClient, pool);
+  expect(poolState.tokenAMint.toString()).eq(tokenAMint.toString());
+  expect(poolState.tokenBMint.toString()).eq(tokenBMint.toString());
+  expect(poolState.tokenAVault.toString()).eq(tokenAVault.toString());
+  expect(poolState.tokenBVault.toString()).eq(tokenBVault.toString());
+  expect(poolState.liquidity.toString()).eq(liquidity.toString());
+  expect(poolState.sqrtPrice.toString()).eq(sqrtPrice.toString());
+
+  expect(poolState.rewardInfos[0].intialized).eq(0);
+  expect(poolState.rewardInfos[1].intialized).eq(0);
+
   return { pool, position: position };
+}
+
+export type InitializeRewardParams = {
+  payer: Keypair;
+  index: number;
+  rewardDuration: BN;
+  pool: PublicKey;
+  rewardMint: PublicKey;
+};
+
+export async function initializeReward(
+  banksClient: BanksClient,
+  params: InitializeRewardParams
+): Promise<void> {
+  const { index, rewardDuration, pool, rewardMint, payer } = params;
+  const program = createCpAmmProgram();
+
+  const poolAuthority = derivePoolAuthority();
+  const rewardVault = deriveRewardVaultAddress(pool, index);
+
+  const transaction = await program.methods
+    .initializeReward(index, rewardDuration, payer.publicKey)
+    .accounts({
+      pool,
+      poolAuthority,
+      rewardVault,
+      rewardMint,
+      admin: payer.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .transaction();
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(payer);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+
+  // validate reward data
+  const poolState = await getPool(banksClient, pool);
+  expect(poolState.rewardInfos[index].intialized).eq(1);
+  expect(poolState.rewardInfos[index].vault.toString()).eq(
+    rewardVault.toString()
+  );
+  expect(poolState.rewardInfos[index].mint.toString()).eq(
+    rewardMint.toString()
+  );
+}
+
+export type UpdateRewardDurationParams = {
+  index: number;
+  admin: Keypair;
+  pool: PublicKey;
+  newDuration: BN;
+};
+
+export async function updateRewardDuration(
+  banksClient: BanksClient,
+  params: UpdateRewardDurationParams
+): Promise<void> {
+  const { pool, admin, index, newDuration } = params;
+  const program = createCpAmmProgram();
+  const transaction = await program.methods
+    .updateRewardDuration(index, newDuration)
+    .accounts({
+      pool,
+      admin: admin.publicKey,
+    })
+    .transaction();
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(admin);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+
+  const poolState = await getPool(banksClient, pool);
+  expect(poolState.rewardInfos[index].rewardDuration.toNumber()).eq(
+    newDuration.toNumber()
+  );
+}
+
+export type UpdateRewardFunderParams = {
+  index: number;
+  admin: Keypair;
+  pool: PublicKey;
+  newFunder: PublicKey;
+};
+
+export async function updateRewardFunder(
+  banksClient: BanksClient,
+  params: UpdateRewardFunderParams
+): Promise<void> {
+  const { pool, admin, index, newFunder } = params;
+  const program = createCpAmmProgram();
+  const transaction = await program.methods
+    .updateRewardFunder(index, newFunder)
+    .accounts({
+      pool,
+      admin: admin.publicKey,
+    })
+    .transaction();
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(admin);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+
+  const poolState = await getPool(banksClient, pool);
+  expect(poolState.rewardInfos[index].funder.toString()).eq(
+    newFunder.toString()
+  );
+}
+
+export type FundRewardParams = {
+  funder: Keypair;
+  index: number;
+  pool: PublicKey;
+  carryForward: boolean;
+  amount: BN;
+};
+
+export async function fundReward(
+  banksClient: BanksClient,
+  params: FundRewardParams
+): Promise<void> {
+  const { index, carryForward, pool, funder, amount } = params;
+  const program = createCpAmmProgram();
+
+  const poolState = await getPool(banksClient, pool);
+  const rewardVault = poolState.rewardInfos[index].vault;
+  const funderTokenAccount = getAssociatedTokenAddressSync(
+    poolState.rewardInfos[index].mint,
+    funder.publicKey
+  );
+
+  const rewardVaultPreBalance = Number(
+    AccountLayout.decode((await banksClient.getAccount(rewardVault)).data)
+      .amount
+  );
+  const funderPreBalance = Number(
+    AccountLayout.decode(
+      (await banksClient.getAccount(funderTokenAccount)).data
+    ).amount
+  );
+
+  const transaction = await program.methods
+    .fundReward(index, amount, carryForward)
+    .accounts({
+      pool,
+      rewardVault: poolState.rewardInfos[index].vault,
+      rewardMint: poolState.rewardInfos[index].mint,
+      funderTokenAccount,
+      funder: funder.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .transaction();
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(funder);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+
+  const rewardVaultPostBalance = Number(
+    AccountLayout.decode((await banksClient.getAccount(rewardVault)).data)
+      .amount
+  );
+  const funderPostBalance = Number(
+    AccountLayout.decode(
+      (await banksClient.getAccount(funderTokenAccount)).data
+    ).amount
+  );
+
+  expect(funderPreBalance - funderPostBalance).eq(amount.toNumber());
+
+  expect(rewardVaultPostBalance - rewardVaultPreBalance).eq(amount.toNumber());
+}
+
+export type ClaimRewardParams = {
+  index: number;
+  user: Keypair;
+  pool: PublicKey;
+};
+
+export async function claimReward(
+  banksClient: BanksClient,
+  params: ClaimRewardParams
+): Promise<void> {
+  const { index, pool, user } = params;
+  const program = createCpAmmProgram();
+
+  const poolState = await getPool(banksClient, pool);
+  const position = derivePositionAddress(pool, user.publicKey);
+  const poolAuthority = derivePoolAuthority();
+  const userTokenAccount = getAssociatedTokenAddressSync(
+    poolState.rewardInfos[index].mint,
+    user.publicKey
+  );
+
+  const transaction = await program.methods
+    .claimReward(index)
+    .accounts({
+      pool,
+      rewardVault: poolState.rewardInfos[index].vault,
+      rewardMint: poolState.rewardInfos[index].mint,
+      poolAuthority,
+      position,
+      userTokenAccount,
+      owner: user.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .transaction();
+
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(user);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+}
+
+export type WithdrawIneligibleRewardParams = {
+  index: number;
+  funder: Keypair;
+  pool: PublicKey;
+};
+
+export async function withdrawIneligibleReward(
+  banksClient: BanksClient,
+  params: WithdrawIneligibleRewardParams
+): Promise<void> {
+  const { index, pool, funder } = params;
+  const program = createCpAmmProgram();
+
+  const poolState = await getPool(banksClient, pool);
+  const poolAuthority = derivePoolAuthority();
+  const funderTokenAccount = getAssociatedTokenAddressSync(
+    poolState.rewardInfos[index].mint,
+    funder.publicKey
+  );
+
+  const transaction = await program.methods
+    .withdrawIneligibleReward(index)
+    .accounts({
+      pool,
+      rewardVault: poolState.rewardInfos[index].vault,
+      rewardMint: poolState.rewardInfos[index].mint,
+      poolAuthority,
+      funderTokenAccount,
+      funder: funder.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .transaction();
+
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(funder);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
 }
 
 export async function refreshVestings(

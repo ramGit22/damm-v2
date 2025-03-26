@@ -7,9 +7,9 @@ on:
       - staging
 
 env:
-  SOLANA_CLI_VERSION: 1.16.1
+  SOLANA_CLI_VERSION: 2.1.0
   NODE_VERSION: 18.20.6
-  ANCHOR_CLI_VERSION: 0.29.0
+  ANCHOR_CLI_VERSION: 0.31.0
 
 jobs:
   program_changed_files:
@@ -59,12 +59,11 @@ jobs:
       # Install rust + toolchain
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.76.0
+          toolchain: 1.85.0
           components: clippy
-      - run: rustup target add x86_64-unknown-linux-gnu
       # Cache rust, cargo
       - uses: Swatinem/rust-cache@v1
-      - run: cargo build -p cli --target=x86_64-unknown-linux-gnu
+      - run: cargo +1.85.0 build -p cli
         shell: bash
 
   cargo_test:
@@ -77,10 +76,9 @@ jobs:
         with:
           toolchain: 1.76.0
           components: clippy
-      - run: rustup target add x86_64-unknown-linux-gnu
       # Cache rust, cargo
       - uses: Swatinem/rust-cache@v1
-      - run: cargo test --package cp-amm --target=x86_64-unknown-linux-gnu
+      - run: cargo test --package cp-amm
         shell: bash
 
   program_test:

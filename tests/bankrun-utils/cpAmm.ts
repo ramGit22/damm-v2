@@ -50,13 +50,12 @@ import {
 import { processTransactionMaybeThrow } from "./common";
 import { CP_AMM_PROGRAM_ID } from "./constants";
 import { assert, expect } from "chai";
-import { IdlType } from "@coral-xyz/anchor/dist/cjs/idl";
 
 export type Pool = IdlAccounts<CpAmm>["pool"];
 export type Position = IdlAccounts<CpAmm>["position"];
 export type Vesting = IdlAccounts<CpAmm>["vesting"];
 export type Config = IdlAccounts<CpAmm>["config"];
-export type LockPositionParams = IdlTypes<CpAmm>["VestingParameters"];
+export type LockPositionParams = IdlTypes<CpAmm>["vestingParameters"];
 export type TokenBadge = IdlAccounts<CpAmm>["tokenBadge"];
 
 export function getSecondKey(key1: PublicKey, key2: PublicKey) {
@@ -87,11 +86,7 @@ export function createCpAmmProgram() {
     wallet,
     {}
   );
-  const program = new Program<CpAmm>(
-    CpAmmIDL as CpAmm,
-    CP_AMM_PROGRAM_ID,
-    provider
-  );
+  const program = new Program<CpAmm>(CpAmmIDL as CpAmm, provider);
   return program;
 }
 
@@ -1115,13 +1110,6 @@ export async function createPosition(
   expect(metadata.name).eq("Meteora Dynamic Amm");
   expect(metadata.symbol).eq("MDA");
 
-  // validate mint close authority is pool account
-  const mintCloseAuthority = MintCloseAuthorityLayout.decode(
-    getExtensionData(ExtensionType.MintCloseAuthority, Buffer.from(tlvData))
-  ).closeAuthority;
-
-  expect(mintCloseAuthority.toString()).eq(pool.toString());
-
   // validate metadata pointer
   const metadataAddress = MetadataPointerLayout.decode(
     getExtensionData(ExtensionType.MetadataPointer, Buffer.from(tlvData))
@@ -1260,10 +1248,87 @@ export async function removeLiquidity(
 
   const transaction = await program.methods
     .removeLiquidity({
-      maxLiquidityDelta: liquidityDelta,
+      liquidityDelta,
       tokenAAmountThreshold,
       tokenBAmountThreshold,
     })
+    .accounts({
+      poolAuthority,
+      pool,
+      position,
+      positionNftAccount,
+      owner: owner.publicKey,
+      tokenAAccount,
+      tokenBAccount,
+      tokenAVault,
+      tokenBVault,
+      tokenAProgram,
+      tokenBProgram,
+      tokenAMint,
+      tokenBMint,
+    })
+    .transaction();
+
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(owner);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+}
+
+
+export type RemoveAllLiquidityParams = {
+  owner: Keypair;
+  pool: PublicKey;
+  position: PublicKey;
+  tokenAAmountThreshold: BN;
+  tokenBAmountThreshold: BN;
+};
+
+export async function removeAllLiquidity(
+  banksClient: BanksClient,
+  params: RemoveAllLiquidityParams,
+) {
+  const {
+    owner,
+    pool,
+    position,
+    tokenAAmountThreshold,
+    tokenBAmountThreshold,
+  } = params;
+
+  const program = createCpAmmProgram();
+  const poolState = await getPool(banksClient, pool);
+  const positionState = await getPosition(banksClient, position);
+  const positionNftAccount = derivePositionNftAccount(positionState.nftMint);
+
+  const poolAuthority = derivePoolAuthority();
+  const tokenAProgram = (await banksClient.getAccount(poolState.tokenAMint))
+    .owner;
+  const tokenBProgram = (await banksClient.getAccount(poolState.tokenBMint))
+    .owner;
+
+  const tokenAAccount = getAssociatedTokenAddressSync(
+    poolState.tokenAMint,
+    owner.publicKey,
+    true,
+    tokenAProgram
+  );
+  const tokenBAccount = getAssociatedTokenAddressSync(
+    poolState.tokenBMint,
+    owner.publicKey,
+    true,
+    tokenBProgram
+  );
+  const tokenAVault = poolState.tokenAVault;
+  const tokenBVault = poolState.tokenBVault;
+  const tokenAMint = poolState.tokenAMint;
+  const tokenBMint = poolState.tokenBMint;
+
+  const transaction = await program.methods
+    .removeAllLiquidity(
+      tokenAAmountThreshold,
+      tokenBAmountThreshold,
+    )
     .accounts({
       poolAuthority,
       pool,
@@ -1432,7 +1497,7 @@ export async function getPool(
 ): Promise<Pool> {
   const program = createCpAmmProgram();
   const account = await banksClient.getAccount(pool);
-  return program.coder.accounts.decode("Pool", Buffer.from(account.data));
+  return program.coder.accounts.decode("pool", Buffer.from(account.data));
 }
 
 export async function getPosition(
@@ -1441,7 +1506,7 @@ export async function getPosition(
 ): Promise<Position> {
   const program = createCpAmmProgram();
   const account = await banksClient.getAccount(position);
-  return program.coder.accounts.decode("Position", Buffer.from(account.data));
+  return program.coder.accounts.decode("position", Buffer.from(account.data));
 }
 
 export async function getVesting(
@@ -1450,7 +1515,7 @@ export async function getVesting(
 ): Promise<Vesting> {
   const program = createCpAmmProgram();
   const account = await banksClient.getAccount(vesting);
-  return program.coder.accounts.decode("Vesting", Buffer.from(account.data));
+  return program.coder.accounts.decode("vesting", Buffer.from(account.data));
 }
 
 export async function getConfig(
@@ -1459,7 +1524,7 @@ export async function getConfig(
 ): Promise<Config> {
   const program = createCpAmmProgram();
   const account = await banksClient.getAccount(config);
-  return program.coder.accounts.decode("Config", Buffer.from(account.data));
+  return program.coder.accounts.decode("config", Buffer.from(account.data));
 }
 
 export function getStakeProgramErrorCodeHexString(errorMessage: String) {
@@ -1482,5 +1547,5 @@ export async function getTokenBadge(
 ): Promise<TokenBadge> {
   const program = createCpAmmProgram();
   const account = await banksClient.getAccount(tokenBadge);
-  return program.coder.accounts.decode("TokenBadge", Buffer.from(account.data));
+  return program.coder.accounts.decode("tokenBadge", Buffer.from(account.data));
 }

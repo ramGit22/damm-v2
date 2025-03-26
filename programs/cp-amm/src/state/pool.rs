@@ -137,13 +137,13 @@ pub struct Pool {
     pub permanent_lock_liquidity: u128,
     /// metrics
     pub metrics: PoolMetrics,
-    /// Farming reward information
-    pub reward_infos: [RewardInfo; NUM_REWARDS],
     /// Padding for further use
     pub _padding_1: [u64; 10],
+    /// Farming reward information
+    pub reward_infos: [RewardInfo; NUM_REWARDS],
 }
 
-const_assert_eq!(Pool::INIT_SPACE, 1080);
+const_assert_eq!(Pool::INIT_SPACE, 1104);
 
 #[zero_copy]
 #[derive(Debug, InitSpace, Default)]
@@ -155,9 +155,10 @@ pub struct PoolMetrics {
     pub total_partner_a_fee: u64,
     pub total_partner_b_fee: u64,
     pub total_position: u64,
+    pub padding: u64,
 }
 
-const_assert_eq!(PoolMetrics::INIT_SPACE, 72);
+const_assert_eq!(PoolMetrics::INIT_SPACE, 80);
 
 impl PoolMetrics {
     pub fn inc_position(&mut self) -> Result<()> {
@@ -200,6 +201,8 @@ pub struct RewardInfo {
     pub reward_token_flag: u8,
     /// padding
     pub _padding_0: [u8; 6],
+    /// Padding to ensure `reward_rate: u128` is 16-byte aligned
+    pub _padding_1: [u8; 8], // 8 bytes
     /// Reward token mint.
     pub mint: Pubkey,
     /// Reward vault token account.
@@ -221,7 +224,7 @@ pub struct RewardInfo {
     pub cumulative_seconds_with_empty_liquidity_reward: u64,
 }
 
-const_assert_eq!(RewardInfo::INIT_SPACE, 184);
+const_assert_eq!(RewardInfo::INIT_SPACE, 192);
 
 impl RewardInfo {
     /// Returns true if this reward is initialized.

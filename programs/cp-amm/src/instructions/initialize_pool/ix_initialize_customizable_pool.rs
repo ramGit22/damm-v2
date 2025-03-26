@@ -3,7 +3,6 @@ use anchor_spl::{
     token_2022::Token2022,
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
-use std::cmp::{max, min};
 
 use crate::{
     activation_handler::ActivationHandler,
@@ -25,6 +24,8 @@ use crate::{
     },
     EvtCreatePosition, EvtInitializePool, PoolError,
 };
+
+use super::{max_key, min_key};
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct InitializeCustomizablePoolParameters {
@@ -91,17 +92,31 @@ pub struct InitializeCustomizablePoolCtx<'info> {
     /// CHECK: Pool creator
     pub creator: UncheckedAccount<'info>,
 
-    /// Unique token mint address, initialize in contract
-    #[account(mut)]
-    pub position_nft_mint: Signer<'info>,
-
-    /// CHECK: position nft account
+    /// position_nft_mint
     #[account(
-        mut,
-        seeds = [POSITION_NFT_ACCOUNT_PREFIX.as_ref(), position_nft_mint.key().as_ref()],
-        bump
+        init,
+        signer,
+        payer = payer,
+        mint::token_program = token_2022_program,
+        mint::decimals = 0,
+        mint::authority = pool_authority,
+        mint::freeze_authority = pool_authority,
+        extensions::metadata_pointer::authority = pool_authority,
+        extensions::metadata_pointer::metadata_address = position_nft_mint,
     )]
-    pub position_nft_account: UncheckedAccount<'info>,
+    pub position_nft_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    /// position nft account
+    #[account(
+        init,
+        seeds = [POSITION_NFT_ACCOUNT_PREFIX.as_ref(), position_nft_mint.key().as_ref()],
+        token::mint = position_nft_mint,
+        token::authority = creator,
+        token::token_program = token_2022_program,
+        payer = payer,
+        bump,
+    )]
+    pub position_nft_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// Address paying to create the pool. Can be anyone
     #[account(mut)]
@@ -121,8 +136,8 @@ pub struct InitializeCustomizablePoolCtx<'info> {
         init,
         seeds = [
             CUSTOMIZABLE_POOL_PREFIX.as_ref(),
-            max(token_a_mint.key(), token_b_mint.key()).as_ref(),
-            min(token_a_mint.key(), token_b_mint.key()).as_ref(),
+            &max_key(&token_a_mint.key(), &token_b_mint.key()),
+            &min_key(&token_a_mint.key(), &token_b_mint.key()),
         ],
         bump,
         payer = payer,
@@ -309,14 +324,10 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
         ctx.accounts.payer.to_account_info(),
         ctx.accounts.position_nft_mint.to_account_info(),
         ctx.accounts.pool_authority.to_account_info(),
-        ctx.accounts.pool.to_account_info(),
         ctx.accounts.system_program.to_account_info(),
         ctx.accounts.token_2022_program.to_account_info(),
-        ctx.accounts.position.to_account_info(),
         ctx.accounts.position_nft_account.to_account_info(),
-        ctx.accounts.creator.to_account_info(),
         ctx.bumps.pool_authority,
-        ctx.bumps.position_nft_account,
     )?;
 
     emit_cpi!(EvtCreatePosition {

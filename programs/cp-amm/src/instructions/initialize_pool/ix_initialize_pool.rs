@@ -335,6 +335,7 @@ pub fn handle_initialize_pool<'c: 'info, 'info>(
     )?;
 
     emit_cpi!(EvtInitializePool {
+        pool: ctx.accounts.pool.key(),
         token_a_mint: ctx.accounts.token_a_mint.key(),
         token_b_mint: ctx.accounts.token_b_mint.key(),
         pool_fees: config.pool_fees.to_pool_fee_parameters(),
@@ -350,6 +351,8 @@ pub fn handle_initialize_pool<'c: 'info, 'info>(
         sqrt_max_price: config.sqrt_max_price,
         alpha_vault,
         collect_fee_mode: config.collect_fee_mode,
+        token_a_amount,
+        token_b_amount,
         total_amount_a,
         total_amount_b,
         pool_type,

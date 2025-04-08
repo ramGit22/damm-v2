@@ -1352,6 +1352,46 @@ export async function removeAllLiquidity(
   await processTransactionMaybeThrow(banksClient, transaction);
 }
 
+
+export async function closePosition(
+  banksClient: BanksClient,
+  params: {
+    owner: Keypair;
+    pool: PublicKey;
+    position: PublicKey;
+  },
+) {
+  const {
+    owner,
+    pool,
+    position,
+  } = params;
+  const program = createCpAmmProgram();
+  const positionState = await getPosition(banksClient, position);
+  const poolAuthority = derivePoolAuthority();
+  const positionNftAccount = derivePositionNftAccount(positionState.nftMint);
+
+  const transaction = await program.methods
+    .closePosition(
+  )
+    .accountsPartial({
+      positionNftMint: positionState.nftMint,
+      positionNftAccount,
+      pool,
+      position,
+      poolAuthority,
+      rentReceiver: owner.publicKey,
+      owner: owner.publicKey,
+
+    })
+    .transaction();
+
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(owner);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+}
+
 export type SwapParams = {
   payer: Keypair;
   pool: PublicKey;

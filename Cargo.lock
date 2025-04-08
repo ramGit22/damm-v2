@@ -3411,6 +3411,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e666a5496a0b2186dbcd0ff6106e29e093c15591bde62c20d3842007c6978a09"
 
 [[package]]
+name = "rust-sdk"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cp-amm",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"

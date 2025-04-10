@@ -1107,8 +1107,8 @@ export async function createPosition(
   const metadata = unpack(
     getExtensionData(ExtensionType.TokenMetadata, Buffer.from(tlvData))
   );
-  expect(metadata.name).eq("Meteora Dynamic Amm");
-  expect(metadata.symbol).eq("MDA");
+  expect(metadata.name).eq("Meteora Position NFT");
+  expect(metadata.symbol).eq("MPN");
 
   // validate metadata pointer
   const metadataAddress = MetadataPointerLayout.decode(

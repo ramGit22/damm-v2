@@ -265,6 +265,7 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
     } = params;
 
     // validate quote token
+    #[cfg(not(feature = "devnet"))]
     validate_quote_token(
         &ctx.accounts.token_a_mint.key(),
         &ctx.accounts.token_b_mint.key(),
@@ -414,6 +415,7 @@ pub fn validate_quote_token(
         // if B is not whitelisted quote token, then pool shouldn't be linked with an alpha-vault
         require!(!has_alpha_vault, PoolError::InvalidQuoteMint);
     }
+
     Ok(())
 }
 

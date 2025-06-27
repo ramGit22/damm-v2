@@ -21,9 +21,11 @@ import {
   getMintCloseAuthority,
   MintCloseAuthorityLayout,
   MetadataPointerLayout,
+  unpackAccount,
 } from "@solana/spl-token";
 import { unpack } from "@solana/spl-token-metadata";
 import {
+  AccountInfo,
   clusterApiUrl,
   ComputeBudgetProgram,
   Connection,
@@ -285,6 +287,34 @@ export async function createTokenBadge(
   expect(tokenBadgeState.tokenMint.toString()).eq(tokenMint.toString());
 }
 
+export type CloseTokenBadgeParams = {
+  tokenMint: PublicKey;
+  admin: Keypair;
+};
+
+export async function closeTokenBadge(
+  banksClient: BanksClient,
+  params: CloseTokenBadgeParams
+) {
+  const { tokenMint, admin } = params;
+  const program = createCpAmmProgram();
+  const tokenBadge = deriveTokenBadgeAddress(tokenMint);
+  const transaction = await program.methods
+    .closeTokenBadge()
+    .accountsPartial({
+      tokenBadge,
+      admin: admin.publicKey,
+      rentReceiver: admin.publicKey,
+    })
+    .transaction();
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(admin);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+  const tokenBadgeAccount = await banksClient.getAccount(tokenBadge);
+  expect(tokenBadgeAccount).to.be.null;
+}
+
 export type ClaimFeeOperatorParams = {
   admin: Keypair;
   operator: PublicKey;
@@ -365,6 +395,34 @@ export async function claimProtocolFee(
   const tokenBProgram = (await banksClient.getAccount(poolState.tokenBMint))
     .owner;
 
+  const tokenAVaultAccount = (await banksClient.getAccount(
+    poolState.tokenAVault
+  )) as AccountInfo<Buffer>;
+
+  const tokenBVaultAccount = (await banksClient.getAccount(
+    poolState.tokenBVault
+  )) as AccountInfo<Buffer>;
+
+  const tokenAVaultState = unpackAccount(
+    poolState.tokenAVault,
+    tokenAVaultAccount,
+    tokenAProgram
+  );
+
+  const tokenBVaultState = unpackAccount(
+    poolState.tokenBVault,
+    tokenBVaultAccount,
+    tokenBProgram
+  );
+
+  const protocolFeeA = tokenAVaultState.isFrozen
+    ? new BN(0)
+    : poolState.protocolAFee;
+
+  const protocolFeeB = tokenBVaultState.isFrozen
+    ? new BN(0)
+    : poolState.protocolBFee;
+
   const tokenAAccount = await getOrCreateAssociatedTokenAccount(
     banksClient,
     operator,
@@ -382,7 +440,7 @@ export async function claimProtocolFee(
   );
 
   const transaction = await program.methods
-    .claimProtocolFee()
+    .claimProtocolFee(protocolFeeA, protocolFeeB)
     .accountsPartial({
       poolAuthority,
       pool,
@@ -880,7 +938,8 @@ export async function initializeReward(
       poolAuthority,
       rewardVault,
       rewardMint,
-      admin: payer.publicKey,
+      payer: payer.publicKey,
+      signer: payer.publicKey,
       tokenProgram,
       systemProgram: SystemProgram.programId,
     })
@@ -918,7 +977,7 @@ export async function updateRewardDuration(
     .updateRewardDuration(index, newDuration)
     .accountsPartial({
       pool,
-      admin: admin.publicKey,
+      signer: admin.publicKey,
     })
     .transaction();
   transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
@@ -949,7 +1008,7 @@ export async function updateRewardFunder(
     .updateRewardFunder(index, newFunder)
     .accountsPartial({
       pool,
-      admin: admin.publicKey,
+      signer: admin.publicKey,
     })
     .transaction();
   transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
@@ -1036,13 +1095,14 @@ export type ClaimRewardParams = {
   user: Keypair;
   position: PublicKey;
   pool: PublicKey;
+  skipReward: number
 };
 
 export async function claimReward(
   banksClient: BanksClient,
   params: ClaimRewardParams
 ): Promise<void> {
-  const { index, pool, user, position } = params;
+  const { index, pool, user, position, skipReward } = params;
   const program = createCpAmmProgram();
 
   const poolState = await getPool(banksClient, pool);
@@ -1064,7 +1124,7 @@ export async function claimReward(
   );
 
   const transaction = await program.methods
-    .claimReward(index)
+    .claimReward(index, skipReward)
     .accountsPartial({
       pool,
       positionNftAccount,
@@ -1725,7 +1785,7 @@ export async function getConfig(
   return program.coder.accounts.decode("config", Buffer.from(account.data));
 }
 
-export function getStakeProgramErrorCodeHexString(errorMessage: String) {
+export function getCpAmmProgramErrorCodeHexString(errorMessage: String) {
   const error = CpAmmIDL.errors.find(
     (e) =>
       e.name.toLowerCase() === errorMessage.toLowerCase() ||

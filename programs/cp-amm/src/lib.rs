@@ -112,8 +112,12 @@ pub mod cp_amm {
         instructions::handle_set_pool_status(ctx, status)
     }
 
-    pub fn claim_protocol_fee(ctx: Context<ClaimProtocolFeesCtx>) -> Result<()> {
-        instructions::handle_claim_protocol_fee(ctx)
+    pub fn claim_protocol_fee(
+        ctx: Context<ClaimProtocolFeesCtx>,
+        max_amount_a: u64,
+        max_amount_b: u64,
+    ) -> Result<()> {
+        instructions::handle_claim_protocol_fee(ctx, max_amount_a, max_amount_b)
     }
 
     pub fn claim_partner_fee(
@@ -122,6 +126,10 @@ pub mod cp_amm {
         max_amount_b: u64,
     ) -> Result<()> {
         instructions::handle_claim_partner_fee(ctx, max_amount_a, max_amount_b)
+    }
+
+    pub fn close_token_badge(_ctx: Context<CloseTokenBadgeCtx>) -> Result<()> {
+        Ok(())
     }
 
     /// USER FUNCTIONS ////
@@ -212,7 +220,11 @@ pub mod cp_amm {
         instructions::handle_permanent_lock_position(ctx, permanent_lock_liquidity)
     }
 
-    pub fn claim_reward(ctx: Context<ClaimRewardCtx>, reward_index: u8) -> Result<()> {
-        instructions::handle_claim_reward(ctx, reward_index)
+    pub fn claim_reward(
+        ctx: Context<ClaimRewardCtx>,
+        reward_index: u8,
+        skip_reward: u8,
+    ) -> Result<()> {
+        instructions::handle_claim_reward(ctx, reward_index, skip_reward)
     }
 }

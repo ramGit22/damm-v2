@@ -137,8 +137,10 @@ pub struct Pool {
     pub permanent_lock_liquidity: u128,
     /// metrics
     pub metrics: PoolMetrics,
+    /// pool creator
+    pub creator: Pubkey,
     /// Padding for further use
-    pub _padding_1: [u64; 10],
+    pub _padding_1: [u64; 6],
     /// Farming reward information
     pub reward_infos: [RewardInfo; NUM_REWARDS],
 }
@@ -161,13 +163,11 @@ pub struct PoolMetrics {
 const_assert_eq!(PoolMetrics::INIT_SPACE, 80);
 
 impl PoolMetrics {
-    pub fn inc_position(&mut self) -> Result<()> {
-        self.total_position = self.total_position.safe_add(1)?;
-        Ok(())
+    pub fn increase_position(&mut self) {
+        self.total_position = self.total_position.wrapping_add(1);
     }
-    pub fn rec_position(&mut self) -> Result<()> {
-        self.total_position = self.total_position.safe_sub(1)?;
-        Ok(())
+    pub fn reduce_position(&mut self) {
+        self.total_position = self.total_position.wrapping_sub(1);
     }
 
     pub fn accumulate_fee(
@@ -356,6 +356,7 @@ impl RewardInfo {
 impl Pool {
     pub fn initialize(
         &mut self,
+        creator: Pubkey,
         pool_fees: PoolFeesStruct,
         token_a_mint: Pubkey,
         token_b_mint: Pubkey,
@@ -374,6 +375,7 @@ impl Pool {
         collect_fee_mode: u8,
         pool_type: u8,
     ) {
+        self.creator = creator;
         self.pool_fees = pool_fees;
         self.token_a_mint = token_a_mint;
         self.token_b_mint = token_b_mint;
@@ -682,12 +684,16 @@ impl Pool {
         Ok(())
     }
 
-    pub fn claim_protocol_fee(&mut self) -> (u64, u64) {
-        let token_a_amount = self.protocol_a_fee;
-        let token_b_amount = self.protocol_b_fee;
-        self.protocol_a_fee = 0;
-        self.protocol_b_fee = 0;
-        (token_a_amount, token_b_amount)
+    pub fn claim_protocol_fee(
+        &mut self,
+        max_amount_a: u64,
+        max_amount_b: u64,
+    ) -> Result<(u64, u64)> {
+        let token_a_amount = self.protocol_a_fee.min(max_amount_a);
+        let token_b_amount = self.protocol_b_fee.min(max_amount_b);
+        self.protocol_a_fee = self.protocol_a_fee.safe_sub(token_a_amount)?;
+        self.protocol_b_fee = self.protocol_b_fee.safe_sub(token_b_amount)?;
+        Ok((token_a_amount, token_b_amount))
     }
 
     pub fn claim_partner_fee(
@@ -734,6 +740,20 @@ impl Pool {
 
     pub fn fee_b_per_liquidity(&self) -> U256 {
         U256::from_le_bytes(self.fee_b_per_liquidity)
+    }
+
+    pub fn validate_authority_to_edit_reward(
+        &self,
+        reward_index: usize,
+        signer: Pubkey,
+    ) -> Result<()> {
+        // pool creator is allowed to initialize reward with only index 0
+        if signer == self.creator {
+            require!(reward_index == 0, PoolError::InvalidRewardIndex)
+        } else {
+            require!(assert_eq_admin(signer), PoolError::InvalidAdmin);
+        }
+        Ok(())
     }
 }
 

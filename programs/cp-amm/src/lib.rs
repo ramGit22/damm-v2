@@ -5,6 +5,7 @@ use anchor_lang::prelude::*;
 #[macro_use]
 pub mod macros;
 
+pub mod const_pda;
 pub mod instructions;
 pub use instructions::*;
 pub mod constants;
@@ -226,5 +227,12 @@ pub mod cp_amm {
         skip_reward: u8,
     ) -> Result<()> {
         instructions::handle_claim_reward(ctx, reward_index, skip_reward)
+    }
+
+    pub fn split_position(
+        ctx: Context<SplitPositionCtx>,
+        params: SplitPositionParameters,
+    ) -> Result<()> {
+        instructions::handle_split_position(ctx, params)
     }
 }

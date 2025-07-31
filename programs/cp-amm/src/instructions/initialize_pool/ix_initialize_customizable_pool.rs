@@ -7,10 +7,11 @@ use anchor_spl::{
 use crate::{
     activation_handler::ActivationHandler,
     alpha_vault::alpha_vault,
+    const_pda,
     constants::{
         seeds::{
-            CUSTOMIZABLE_POOL_PREFIX, POOL_AUTHORITY_PREFIX, POSITION_NFT_ACCOUNT_PREFIX,
-            POSITION_PREFIX, TOKEN_VAULT_PREFIX,
+            CUSTOMIZABLE_POOL_PREFIX, POSITION_NFT_ACCOUNT_PREFIX, POSITION_PREFIX,
+            TOKEN_VAULT_PREFIX,
         },
         DEFAULT_QUOTE_MINTS, MAX_SQRT_PRICE, MIN_SQRT_PRICE,
     },
@@ -69,8 +70,6 @@ impl InitializeCustomizablePoolParameters {
 
         // validate fee
         self.pool_fees.validate()?;
-        // more validation for protocol fee and partner fee
-        self.pool_fees.validate_for_customizable_pool()?;
 
         CollectFeeMode::try_from(self.collect_fee_mode)
             .map_err(|_| PoolError::InvalidCollectFeeMode)?;
@@ -125,10 +124,7 @@ pub struct InitializeCustomizablePoolCtx<'info> {
 
     /// CHECK: pool authority
     #[account(
-        seeds = [
-            POOL_AUTHORITY_PREFIX.as_ref(),
-        ],
-        bump,
+        address = const_pda::pool_authority::ID
     )]
     pub pool_authority: UncheckedAccount<'info>,
 
@@ -329,7 +325,6 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
         ctx.accounts.system_program.to_account_info(),
         ctx.accounts.token_2022_program.to_account_info(),
         ctx.accounts.position_nft_account.to_account_info(),
-        ctx.bumps.pool_authority,
     )?;
 
     emit_cpi!(EvtCreatePosition {

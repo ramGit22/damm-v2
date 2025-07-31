@@ -112,9 +112,7 @@ export type BaseFee = {
 
 export type PoolFees = {
   baseFee: BaseFee;
-  protocolFeePercent: number;
-  partnerFeePercent: number;
-  referralFeePercent: number;
+  padding: number[],
   dynamicFee: DynamicFee | null;
 };
 
@@ -220,13 +218,13 @@ export async function createConfigIx(
     params.poolFees.baseFee.periodFrequency.toNumber()
   );
   expect(configState.poolFees.protocolFeePercent).eq(
-    params.poolFees.protocolFeePercent
+    20
   );
   expect(configState.poolFees.partnerFeePercent).eq(
-    params.poolFees.partnerFeePercent
+    0
   );
   expect(configState.poolFees.referralFeePercent).eq(
-    params.poolFees.referralFeePercent
+    20
   );
   expect(configState.configType).eq(0); // ConfigType: Static
 
@@ -784,9 +782,7 @@ export async function setPoolStatus(
 
 export type PoolFeesParams = {
   baseFee: BaseFee;
-  protocolFeePercent: number;
-  partnerFeePercent: number;
-  referralFeePercent: number;
+  padding: number[],
   dynamicFee: DynamicFee | null;
 };
 
@@ -1095,7 +1091,7 @@ export type ClaimRewardParams = {
   user: Keypair;
   position: PublicKey;
   pool: PublicKey;
-  skipReward: number
+  skipReward: number;
 };
 
 export async function claimReward(
@@ -1745,6 +1741,68 @@ export async function claimPositionFee(
 
   transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
   transaction.sign(owner);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+}
+
+export type SplitPositionParams = {
+  firstPositionOwner: Keypair;
+  secondPositionOwner: Keypair;
+  pool: PublicKey;
+  firstPosition: PublicKey;
+  firstPositionNftAccount: PublicKey;
+  secondPosition: PublicKey;
+  secondPositionNftAccount: PublicKey;
+  permanentLockedLiquidityPercentage: number;
+  unlockedLiquidityPercentage: number;
+  feeAPercentage: number;
+  feeBPercentage: number;
+  reward0Percentage: number;
+  reward1Percentage: number;
+};
+export async function splitPosition(
+  banksClient: BanksClient,
+  params: SplitPositionParams
+) {
+  const {
+    pool,
+    firstPositionOwner,
+    secondPositionOwner,
+    firstPosition,
+    secondPosition,
+    firstPositionNftAccount,
+    secondPositionNftAccount,
+    permanentLockedLiquidityPercentage,
+    unlockedLiquidityPercentage,
+    feeAPercentage,
+    feeBPercentage,
+    reward0Percentage,
+    reward1Percentage,
+  } = params;
+  const program = createCpAmmProgram();
+  const poolAuthority = derivePoolAuthority();
+  const transaction = await program.methods
+    .splitPosition({
+      permanentLockedLiquidityPercentage,
+      unlockedLiquidityPercentage,
+      feeAPercentage,
+      feeBPercentage,
+      reward0Percentage,
+      reward1Percentage,
+      padding: new Array(16).fill(0),
+    })
+    .accountsPartial({
+      pool,
+      firstPosition,
+      firstPositionNftAccount,
+      secondPosition,
+      secondPositionNftAccount,
+      firstOwner: firstPositionOwner.publicKey,
+      secondOwner: secondPositionOwner.publicKey,
+    })
+    .transaction();
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(firstPositionOwner, secondPositionOwner);
 
   await processTransactionMaybeThrow(banksClient, transaction);
 }

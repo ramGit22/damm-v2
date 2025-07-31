@@ -29,6 +29,8 @@ pub const U24_MAX: u32 = 0xffffff;
 
 // Number of rewards supported by pool
 pub const NUM_REWARDS: usize = 2;
+pub const REWARD_INDEX_0: usize = 0;
+pub const REWARD_INDEX_1: usize = 1;
 
 // Minimum reward duration
 pub const MIN_REWARD_DURATION: u64 = 24 * 60 * 60; // 1 day
@@ -96,9 +98,15 @@ pub mod fee {
         MIN_FEE_NUMERATOR
     );
 
-    pub const CUSTOMIZABLE_PROTOCOL_FEE_PERCENT: u8 = 20; // 20%
+    pub const PROTOCOL_FEE_PERCENT: u8 = 20; // 20%
 
-    pub const CUSTOMIZABLE_HOST_FEE_PERCENT: u8 = 20; // 20%
+    pub const HOST_FEE_PERCENT: u8 = 20; // 20% of protocol fee
+
+    pub const PARTNER_FEE_PERCENT: u8 = 0; // percentage of partner fee
+
+    static_assertions::const_assert!(PROTOCOL_FEE_PERCENT <= 50);
+    static_assertions::const_assert!(HOST_FEE_PERCENT <= 50);
+    static_assertions::const_assert!(PARTNER_FEE_PERCENT <= 50);
 }
 
 pub mod seeds {

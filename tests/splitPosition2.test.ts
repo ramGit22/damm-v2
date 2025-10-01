@@ -19,17 +19,18 @@ import {
   mintSplTokenTo,
   createPosition,
   getPosition,
-  splitPosition,
+  splitPosition2,
   derivePositionNftAccount,
   getCpAmmProgramErrorCodeHexString,
   permanentLockPosition,
   U64_MAX,
   addLiquidity,
   swap,
+  SPLIT_POSITION_DENOMINATOR,
 } from "./bankrun-utils";
 import BN from "bn.js";
 
-describe("Split position", () => {
+describe("Split position 2", () => {
   let context: ProgramTestContext;
   let admin: Keypair;
   let creator: Keypair;
@@ -142,19 +143,12 @@ describe("Split position", () => {
   it("Cannot split two same position", async () => {
     const positionState = await getPosition(context.banksClient, position);
 
-    const splitParams = {
-      unlockedLiquidityPercentage: 50,
-      permanentLockedLiquidityPercentage: 0,
-      feeAPercentage: 0,
-      feeBPercentage: 0,
-      reward0Percentage: 0,
-      reward1Percentage: 0,
-    };
+    const numerator = SPLIT_POSITION_DENOMINATOR / 2;
 
     const errorCode = getCpAmmProgramErrorCodeHexString("SamePosition");
 
     await expectThrowsAsync(async () => {
-      await splitPosition(context.banksClient, {
+      await splitPosition2(context.banksClient, {
         firstPositionOwner: creator,
         secondPositionOwner: creator,
         pool,
@@ -166,7 +160,7 @@ describe("Split position", () => {
         secondPositionNftAccount: derivePositionNftAccount(
           positionState.nftMint
         ),
-        ...splitParams,
+        numerator,
       });
     }, errorCode);
   });
@@ -185,21 +179,14 @@ describe("Split position", () => {
       secondPosition
     );
 
-    const splitParams = {
-      unlockedLiquidityPercentage: 0,
-      permanentLockedLiquidityPercentage: 0,
-      feeAPercentage: 0,
-      feeBPercentage: 0,
-      reward0Percentage: 0,
-      reward1Percentage: 0,
-    };
+    const numerator = 0;
 
     const errorCode = getCpAmmProgramErrorCodeHexString(
       "InvalidSplitPositionParameters"
     );
 
     await expectThrowsAsync(async () => {
-      await splitPosition(context.banksClient, {
+      await splitPosition2(context.banksClient, {
         firstPositionOwner: creator,
         secondPositionOwner: user,
         pool,
@@ -211,7 +198,7 @@ describe("Split position", () => {
         secondPositionNftAccount: derivePositionNftAccount(
           secondPositionState.nftMint
         ),
-        ...splitParams,
+        numerator
       });
     }, errorCode);
   });
@@ -247,18 +234,13 @@ describe("Split position", () => {
     );
     const firstPositionState = await getPosition(context.banksClient, position);
 
-    const splitParams = {
-      unlockedLiquidityPercentage: 50,
-      permanentLockedLiquidityPercentage: 0,
-      feeAPercentage: 50,
-      feeBPercentage: 50,
-      reward0Percentage: 0,
-      reward1Percentage: 0,
-    };
+    const numerator = SPLIT_POSITION_DENOMINATOR / 2;
 
     const newLiquidityDelta = firstPositionState.unlockedLiquidity
-      .muln(splitParams.unlockedLiquidityPercentage)
-      .divn(100);
+      .mul(new BN(numerator))
+      .div(new BN(SPLIT_POSITION_DENOMINATOR));
+
+
     let secondPositionState = await getPosition(
       context.banksClient,
       secondPosition
@@ -268,7 +250,7 @@ describe("Split position", () => {
 
     const beforeSecondPositionLiquidity = secondPositionState.unlockedLiquidity;
 
-    await splitPosition(context.banksClient, {
+    await splitPosition2(context.banksClient, {
       firstPositionOwner: creator,
       secondPositionOwner: user,
       pool,
@@ -280,7 +262,7 @@ describe("Split position", () => {
       secondPositionNftAccount: derivePositionNftAccount(
         secondPositionState.nftMint
       ),
-      ...splitParams,
+      numerator,
     });
 
     poolState = await getPool(context.banksClient, pool);
@@ -314,20 +296,12 @@ describe("Split position", () => {
       pool
     );
     const firstPositionState = await getPosition(context.banksClient, position);
-
-    const splitParams = {
-      unlockedLiquidityPercentage: 0,
-      permanentLockedLiquidityPercentage: 50,
-      feeAPercentage: 0,
-      feeBPercentage: 0,
-      reward0Percentage: 0,
-      reward1Percentage: 0,
-    };
+    const numerator = SPLIT_POSITION_DENOMINATOR / 2;
 
     const permanentLockedLiquidityDelta =
       firstPositionState.permanentLockedLiquidity
-        .muln(splitParams.permanentLockedLiquidityPercentage)
-        .divn(100);
+        .mul(new BN(numerator))
+        .div(new BN(SPLIT_POSITION_DENOMINATOR));
     let secondPositionState = await getPosition(
       context.banksClient,
       secondPosition
@@ -338,7 +312,7 @@ describe("Split position", () => {
     const beforeSecondPositionLiquidity =
       secondPositionState.permanentLockedLiquidity;
 
-    await splitPosition(context.banksClient, {
+    await splitPosition2(context.banksClient, {
       firstPositionOwner: creator,
       secondPositionOwner: user,
       pool,
@@ -350,7 +324,7 @@ describe("Split position", () => {
       secondPositionNftAccount: derivePositionNftAccount(
         secondPositionState.nftMint
       ),
-      ...splitParams,
+      numerator,
     });
 
     poolState = await getPool(context.banksClient, pool);
@@ -399,16 +373,7 @@ describe("Split position", () => {
       secondPosition
     );
 
-    const splitParams = {
-      unlockedLiquidityPercentage: 100,
-      permanentLockedLiquidityPercentage: 100,
-      feeAPercentage: 100,
-      feeBPercentage: 100,
-      reward0Percentage: 100,
-      reward1Percentage: 100,
-    };
-
-    await splitPosition(context.banksClient, {
+    await splitPosition2(context.banksClient, {
       firstPositionOwner: creator,
       secondPositionOwner: user,
       pool,
@@ -420,7 +385,7 @@ describe("Split position", () => {
       secondPositionNftAccount: derivePositionNftAccount(
         beforeSeconPositionState.nftMint
       ),
-      ...splitParams,
+      numerator: SPLIT_POSITION_DENOMINATOR
     });
 
     const afterFirstPositionState = await getPosition(

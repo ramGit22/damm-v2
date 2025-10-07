@@ -1,4 +1,4 @@
-use anyhow::{ensure, Context, Ok, Result};
+use anyhow::{ensure, Context, Result};
 use cp_amm::{
     params::swap::TradeDirection,
     state::{fee::FeeMode, Pool, SwapResult},
@@ -15,7 +15,7 @@ pub fn get_quote(
 ) -> Result<SwapResult> {
     ensure!(actual_amount_in > 0, "amount is zero");
 
-    let result = get_internal_quote(
+    get_internal_quote(
         pool,
         current_timestamp,
         current_slot,
@@ -23,8 +23,6 @@ pub fn get_quote(
         a_to_b,
         has_referral,
     )
-    .unwrap();
-    Ok(result)
 }
 
 fn get_internal_quote(

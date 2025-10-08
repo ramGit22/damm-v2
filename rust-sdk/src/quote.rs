@@ -22,8 +22,7 @@ pub fn get_quote(
         actual_amount_in,
         a_to_b,
         has_referral,
-    )
-    .unwrap();
+    )?;
     Ok(result)
 }
 
